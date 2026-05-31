@@ -17,19 +17,24 @@ export class HealthController {
   }
 
   @Public()
-  @Get('env-debug')
-  envDebug() {
+  @Get('supabase-raw')
+  async supabaseRaw() {
     const url = this.config.get('SUPABASE_URL') || '';
     const key = this.config.get('SUPABASE_SERVICE_KEY') || '';
+
+    const response = await fetch(`${url}/rest/v1/categories?select=id,name&limit=1`, {
+      headers: {
+        'apikey': key,
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    const body = await response.text();
     return {
-      url_length: url.length,
-      url_starts_with: url.slice(0, 8),
-      url_ends_with: url.slice(-10),
-      url_has_quotes: url.startsWith('"') || url.startsWith("'"),
-      key_length: key.length,
-      key_starts_with_eyJ: key.startsWith('eyJ'),
-      key_first_10: key.slice(0, 10),
-      key_has_quotes: key.startsWith('"') || key.startsWith("'"),
+      status: response.status,
+      statusText: response.statusText,
+      body: body.slice(0, 500),
     };
   }
 }
