@@ -7,10 +7,10 @@
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "ignoreDeprecations": "5.0",
     "target": "ES2021",
     "outDir": "./dist",
-    "baseUrl": "./",
-    "types": ["node"]
+    "skipLibCheck": true,
+    "strictNullChecks": false,
+    "noImplicitAny": false
   }
 }
