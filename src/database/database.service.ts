@@ -8,18 +8,17 @@ export class DatabaseService {
   public client: SupabaseClient;
 
   constructor(private config: ConfigService) {
-    this.client = createClient(
-      this.config.getOrThrow('SUPABASE_URL'),
-      this.config.getOrThrow('SUPABASE_SERVICE_KEY'),
-      {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-        realtime: {
-          transport: ws,
+    const url = this.config.getOrThrow('SUPABASE_URL');
+    const key = this.config.getOrThrow('SUPABASE_SERVICE_KEY');
+
+    this.client = createClient(url, key, {
+      realtime: { transport: ws },
+      global: {
+        headers: {
+          apikey: key,
+          Authorization: `Bearer ${key}`,
         },
       },
-    );
+    });
   }
 }
