@@ -1,9 +1,11 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 
 @Injectable()
 export class CategoriesService {
+  private readonly logger = new Logger(CategoriesService.name);
+
   constructor(private db: DatabaseService) {}
 
   async findAll() {
@@ -12,7 +14,10 @@ export class CategoriesService {
       .select('*')
       .eq('is_active', true)
       .order('sort_order', { ascending: true });
-    if (error) throw error;
+    if (error) {
+      this.logger.error('findAll error:', error);
+      throw error;
+    }
     return data;
   }
 
@@ -34,7 +39,6 @@ export class CategoriesService {
       .eq('slug', dto.slug)
       .single();
     if (existing) throw new ConflictException('Slug already exists');
-
     const { data, error } = await this.db.client
       .from('categories')
       .insert(dto)
@@ -80,7 +84,10 @@ export class CategoriesService {
       .from('categories')
       .upsert(categories, { onConflict: 'slug' })
       .select();
-    if (error) throw error;
+    if (error) {
+      this.logger.error('seed error:', error);
+      throw error;
+    }
     return data;
   }
 }
