@@ -11,6 +11,7 @@
     "@nestjs/config": "^3.0.0",
     "@nestjs/core": "^10.0.0",
     "@nestjs/jwt": "^10.0.0",
+    "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/throttler": "^5.0.0",
     "@supabase/supabase-js": "^2.0.0",
@@ -23,9 +24,14 @@
     "class-validator": "^0.14.0",
     "cookie-parser": "^1.4.6",
     "helmet": "^7.0.0",
+    "passport": "^0.7.0",
+    "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.1.13",
     "rxjs": "^7.8.0",
     "typescript": "^5.0.0",
     "ws": "^8.21.0"
+  },
+  "devDependencies": {
+    "@types/passport-jwt": "^4.0.1"
   }
 }
