@@ -3,35 +3,10 @@ import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
-import { DatabaseService } from '../database/database.service';
 
 @Controller('categories')
 export class CategoriesController {
-  constructor(
-    private categories: CategoriesService,
-    private db: DatabaseService,
-  ) {}
-
-  // TEMP DEBUG — remove after diagnosing
-  @Public()
-  @Get('raw-debug')
-  async rawDebug() {
-    const result = await this.db.client
-      .from('categories')
-      .select('*')
-      .limit(3);
-    return {
-      data: result.data,
-      error: result.error ? {
-        message: result.error.message,
-        code: (result.error as any).code,
-        details: (result.error as any).details,
-        hint: (result.error as any).hint,
-      } : null,
-      status: result.status,
-      statusText: result.statusText,
-    };
-  }
+  constructor(private categories: CategoriesService) {}
 
   @Public()
   @Get()
