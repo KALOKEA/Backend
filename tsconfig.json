@@ -6,9 +6,11 @@
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "allowSyntheticDefaultImports": true,
-    "ignoreDeprecations": "6.0",
+    "esModuleInterop": true,
+    "ignoreDeprecations": "5.0",
     "target": "ES2021",
     "outDir": "./dist",
-    "baseUrl": "./"
+    "baseUrl": "./",
+    "types": ["node"]
   }
 }
