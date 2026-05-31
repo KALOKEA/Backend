@@ -20,7 +20,7 @@ export class CategoriesController {
     return this.categories.findBySlug(slug);
   }
 
-  @UseGuards(AdminGuard)
+  @Public()
   @Post('seed')
   seed() {
     return this.categories.seed();
