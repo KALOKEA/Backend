@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import * as ws from 'ws';
 
 @Injectable()
 export class DatabaseService {
@@ -10,6 +11,11 @@ export class DatabaseService {
     this.client = createClient(
       this.config.getOrThrow('SUPABASE_URL'),
       this.config.getOrThrow('SUPABASE_SERVICE_KEY'),
+      {
+        realtime: {
+          transport: ws,
+        },
+      },
     );
   }
 }
