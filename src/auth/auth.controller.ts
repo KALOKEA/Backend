@@ -1,9 +1,10 @@
-import { Controller, Post, Body, Req, Res } from '@nestjs/common';
+import { Controller, Get, Post, Body, Req, Res } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { Request, Response } from 'express';
 import { Public } from '../common/decorators/public.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -40,5 +41,10 @@ export class AuthController {
   logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie('refresh_token');
     return { message: 'Logged out' };
+  }
+
+  @Get('me')
+  getMe(@CurrentUser() user: any) {
+    return this.auth.getMe(user.id);
   }
 }

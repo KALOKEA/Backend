@@ -1,17 +1,21 @@
-import { Injectable, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import { Injectable, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { DatabaseService } from '../database/database.service';
+import { EmailService } from '../email/email.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private db: DatabaseService,
     private jwt: JwtService,
     private config: ConfigService,
+    private email: EmailService,
   ) {}
 
   async sendOtp(dto: SendOtpDto) {
@@ -24,7 +28,13 @@ export class AuthService {
 
     await this.db.client.from('otp_sessions').insert({ identifier, otp_hash, expires_at });
 
-    console.log(`OTP for ${identifier}: ${otp}`);
+    // Send via email if email provided, otherwise log (SMS to be added later)
+    if (dto.email) {
+      await this.email.sendOtp(dto.email, otp);
+    } else {
+      // SMS not yet implemented — log OTP for now
+      this.logger.log(`OTP for ${identifier}: ${otp}`);
+    }
 
     return { message: 'OTP sent successfully' };
   }
@@ -80,6 +90,7 @@ export class AuthService {
   }
 
   async refresh(token: string) {
+    if (!token) throw new UnauthorizedException('No refresh token');
     try {
       const payload = this.jwt.verify(token, {
         secret: this.config.getOrThrow('JWT_REFRESH_SECRET'),
@@ -92,5 +103,14 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException('Invalid refresh token');
     }
+  }
+
+  async getMe(userId: string) {
+    const { data: user } = await this.db.client
+      .from('users')
+      .select('id, name, email, phone, role, created_at')
+      .eq('id', userId)
+      .single();
+    return user;
   }
 }
