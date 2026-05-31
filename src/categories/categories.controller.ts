@@ -9,6 +9,20 @@ export class CategoriesController {
   constructor(private categories: CategoriesService) {}
 
   @Public()
+  @Get('debug')
+  async debug() {
+    const { data, error } = await (this.categories as any).db.client
+      .from('categories')
+      .select('count')
+      .limit(1);
+    return {
+      connected: !error,
+      error: error ? { message: error.message, code: error.code, details: error.details, hint: error.hint } : null,
+      data,
+    };
+  }
+
+  @Public()
   @Get()
   findAll() {
     return this.categories.findAll();
