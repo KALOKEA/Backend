@@ -4,7 +4,8 @@
   "scripts": {
     "start": "node dist/main.js",
     "start:dev": "ts-node src/main.ts",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "start:prod": "npm run build && node dist/main.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
