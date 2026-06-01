@@ -38,6 +38,27 @@ export class OrdersService {
 
     if (!cartItems || cartItems.length === 0) throw new BadRequestException('Cart is empty');
 
+    // Resolve the delivery address into a snapshot.
+    // Logged-in users send address_id (we load + verify ownership, since the
+    // service-role key bypasses RLS). Guests may send address_snapshot directly.
+    let addressSnapshot = dto.address_snapshot;
+    if (dto.address_id) {
+      if (!userId) throw new BadRequestException('Login required to use a saved address');
+      const { data: address } = await this.db.client
+        .from('addresses')
+        .select('name, phone, line1, line2, city, state, pincode')
+        .eq('id', dto.address_id)
+        .eq('user_id', userId)
+        .single();
+      if (!address) throw new BadRequestException('Address not found');
+      addressSnapshot = address;
+    }
+    if (!addressSnapshot) throw new BadRequestException('Delivery address required');
+
+    // Normalize payment method. The storefront offers upi/card/netbanking/wallet,
+    // but those are all Razorpay sub-methods — only COD is a distinct gateway.
+    const paymentMethod = dto.payment_method === 'cod' ? 'cod' : 'razorpay';
+
     // Calculate totals
     let subtotal = 0;
     const orderItems = cartItems.map((item: any) => {
@@ -65,7 +86,7 @@ export class OrdersService {
     });
 
     const shipping = subtotal >= 599 ? 0 : 49;
-    const cod_fee = dto.payment_method === 'cod' ? 49 : 0;
+    const cod_fee = paymentMethod === 'cod' ? 49 : 0;
     const total = subtotal + shipping + cod_fee;
 
     // Create order
@@ -79,9 +100,9 @@ export class OrdersService {
         subtotal,
         shipping: shipping + cod_fee,
         total,
-        address_snapshot: dto.address_snapshot,
-        payment_method: dto.payment_method,
-        payment_status: dto.payment_method === 'cod' ? 'pending' : 'pending',
+        address_snapshot: addressSnapshot,
+        payment_method: paymentMethod,
+        payment_status: 'pending',
         notes: dto.notes || null,
       })
       .select()
@@ -105,14 +126,22 @@ export class OrdersService {
     // Clear cart
     await this.db.client.from('cart_items').delete().eq('cart_id', cart.id);
 
-    // Send confirmation email for COD
-    if (dto.payment_method === 'cod' && dto.guest_email) {
-      await this.email.sendOrderConfirmation(dto.guest_email, {
-        customer_name: dto.address_snapshot.name,
-        order_id: order.order_number,
-        total,
-        items: `${cartItems.length} item(s)`,
-      });
+    // Send confirmation email for COD (Razorpay orders are confirmed via webhook).
+    if (paymentMethod === 'cod') {
+      let recipientEmail = dto.guest_email;
+      if (!recipientEmail && userId) {
+        const { data: u } = await this.db.client
+          .from('users').select('email').eq('id', userId).single();
+        recipientEmail = u?.email || undefined;
+      }
+      if (recipientEmail) {
+        await this.email.sendOrderConfirmation(recipientEmail, {
+          customer_name: addressSnapshot.name,
+          order_id: order.order_number,
+          total,
+          items: `${cartItems.length} item(s)`,
+        });
+      }
     }
 
     return order;

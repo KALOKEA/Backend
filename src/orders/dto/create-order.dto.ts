@@ -1,12 +1,19 @@
-import { IsString, IsOptional, IsObject, IsArray, IsNumber, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsObject, IsUUID } from 'class-validator';
 
 export class CreateOrderDto {
   @IsOptional()
   @IsString()
   session_id?: string; // guest cart
 
+  // Logged-in users send a saved address_id; the backend loads it and snapshots
+  // it (with an ownership check). Guests send address_snapshot directly.
+  @IsOptional()
+  @IsUUID()
+  address_id?: string;
+
+  @IsOptional()
   @IsObject()
-  address_snapshot: {
+  address_snapshot?: {
     name: string;
     phone: string;
     line1: string;
@@ -17,7 +24,7 @@ export class CreateOrderDto {
   };
 
   @IsString()
-  payment_method: string; // 'razorpay' | 'cod'
+  payment_method: string; // 'upi' | 'card' | 'netbanking' | 'wallet' | 'cod' — normalized server-side
 
   @IsOptional()
   @IsString()
