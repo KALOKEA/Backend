@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { HealthModule } from './health/health.module';
 import { DatabaseModule } from './database/database.module';
 import { EmailModule } from './email/email.module';
@@ -25,6 +26,9 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // Global rate limiting: max 100 requests per minute per IP by default.
+    // Sensitive endpoints (e.g. OTP) tighten this further via @Throttle().
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     DatabaseModule,
     EmailModule,
     HealthModule,
@@ -46,6 +50,11 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     AdminModule,
   ],
   providers: [
+    // ThrottlerGuard runs first so rate limits apply even to auth/public routes.
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,

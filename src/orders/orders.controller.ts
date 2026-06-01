@@ -26,8 +26,8 @@ export class OrdersController {
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.orders.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.orders.findOne(id, user);
   }
 
   @UseGuards(AdminGuard)

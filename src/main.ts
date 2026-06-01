@@ -9,6 +9,10 @@ import { TransformInterceptor } from './common/interceptors/transform.intercepto
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });
 
+  // Railway/Cloudflare put a proxy in front of the app. Trust the first hop so
+  // req.ip reflects the real client (needed for correct per-IP rate limiting).
+  app.getHttpAdapter().getInstance().set('trust proxy', 1);
+
   app.use(helmet());
   app.use(cookieParser());
 

@@ -61,7 +61,13 @@ export class PaymentsService {
       .update(rawBody)
       .digest('hex');
 
-    if (expectedSignature !== signature) {
+    // Constant-time comparison to avoid signature timing attacks.
+    const expectedBuf = Buffer.from(expectedSignature, 'hex');
+    const providedBuf = Buffer.from(signature || '', 'hex');
+    if (
+      expectedBuf.length !== providedBuf.length ||
+      !crypto.timingSafeEqual(expectedBuf, providedBuf)
+    ) {
       this.logger.warn('Invalid Razorpay webhook signature');
       throw new BadRequestException('Invalid signature');
     }

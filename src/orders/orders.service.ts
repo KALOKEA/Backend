@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -44,6 +44,12 @@ export class OrdersService {
       const variant = item.product_variants;
       const product = variant.products;
       const price = variant.price;
+      // Guard against overselling / negative stock
+      if (variant.stock == null || variant.stock < item.quantity) {
+        throw new BadRequestException(
+          `Insufficient stock for ${product?.name || 'item'}${variant.size ? ` (${variant.size})` : ''}`,
+        );
+      }
       subtotal += price * item.quantity;
       const primaryImage = product.product_images?.find((i: any) => i.is_primary)?.url || product.product_images?.[0]?.url;
       return {
@@ -127,13 +133,21 @@ export class OrdersService {
     return { data, meta: { total: count, page, limit } };
   }
 
-  async findOne(id: string) {
+  async findOne(id: string, user?: { id: string; role: string }) {
     const { data, error } = await this.db.client
       .from('orders')
       .select('*, order_items(*)')
       .eq('id', id)
       .single();
     if (error || !data) throw new NotFoundException('Order not found');
+
+    // Ownership enforcement (Supabase uses the service key, so RLS is bypassed —
+    // authorization MUST be enforced here). Admins may view any order; a regular
+    // user may only view their own. Return 404 (not 403) to avoid leaking existence.
+    const isAdmin = user?.role === 'admin';
+    if (!isAdmin && data.user_id !== user?.id) {
+      throw new NotFoundException('Order not found');
+    }
     return data;
   }
 

@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Body, Req, Res } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
@@ -11,12 +12,14 @@ export class AuthController {
   constructor(private auth: AuthService) {}
 
   @Public()
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // max 3 OTP requests/min per IP
   @Post('send-otp')
   sendOtp(@Body() dto: SendOtpDto) {
     return this.auth.sendOtp(dto);
   }
 
   @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // max 10 verify attempts/min per IP
   @Post('verify-otp')
   async verifyOtp(@Body() dto: VerifyOtpDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.auth.verifyOtp(dto);
