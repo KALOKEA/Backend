@@ -23,11 +23,34 @@ export class CouponsService {
     if (dto.order_value < coupon.min_order_value)
       throw new BadRequestException(`Minimum order value ₹${coupon.min_order_value} required`);
 
-    const discount = coupon.type === 'percent'
+    const rawDiscount = coupon.type === 'percent'
       ? Math.round((dto.order_value * coupon.value) / 100)
       : coupon.value;
+    // Never discount more than the order is worth.
+    const discount = Math.min(rawDiscount, dto.order_value);
 
-    return { coupon_id: coupon.id, code: coupon.code, type: coupon.type, value: coupon.value, discount };
+    return {
+      valid: true,
+      coupon_id: coupon.id,
+      code: coupon.code,
+      type: coupon.type,
+      value: coupon.value,
+      discount,
+      discount_amount: discount, // alias expected by the storefront
+    };
+  }
+
+  // Record a redemption once an order using this coupon is placed.
+  async redeem(couponId: string, orderId: string, userId?: string) {
+    const { data: coupon } = await this.db.client
+      .from('coupons').select('used_count').eq('id', couponId).single();
+    await this.db.client
+      .from('coupons')
+      .update({ used_count: (coupon?.used_count || 0) + 1 })
+      .eq('id', couponId);
+    await this.db.client
+      .from('coupon_uses')
+      .insert({ coupon_id: couponId, order_id: orderId, user_id: userId || null });
   }
 
   async findAll() {

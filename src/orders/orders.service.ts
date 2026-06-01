@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
+import { CouponsService } from '../coupons/coupons.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 
@@ -11,6 +12,7 @@ export class OrdersService {
   constructor(
     private db: DatabaseService,
     private email: EmailService,
+    private coupons: CouponsService,
   ) {}
 
   private generateOrderNumber(): string {
@@ -85,9 +87,20 @@ export class OrdersService {
       };
     });
 
-    const shipping = subtotal >= 599 ? 0 : 49;
-    const cod_fee = paymentMethod === 'cod' ? 49 : 0;
-    const total = subtotal + shipping + cod_fee;
+    // Apply coupon (server-authoritative — the client-side discount is display only).
+    let discount = 0;
+    let appliedCoupon: { id: string; code: string } | null = null;
+    if (dto.coupon_code) {
+      const result = await this.coupons.validate({ code: dto.coupon_code, order_value: subtotal });
+      discount = Math.min(result.discount, subtotal);
+      appliedCoupon = { id: result.coupon_id, code: result.code };
+    }
+
+    // All money is in paise (matches the storefront + Razorpay).
+    // Free shipping over ₹999; otherwise ₹49 shipping. COD adds a ₹49 fee.
+    const shipping = subtotal >= 99900 ? 0 : 4900;
+    const cod_fee = paymentMethod === 'cod' ? 4900 : 0;
+    const total = Math.max(0, subtotal - discount) + shipping + cod_fee;
 
     // Create order
     const { data: order, error } = await this.db.client
@@ -99,7 +112,10 @@ export class OrdersService {
         guest_email: dto.guest_email || null,
         subtotal,
         shipping: shipping + cod_fee,
+        discount,
         total,
+        coupon_id: appliedCoupon?.id || null,
+        coupon_code: appliedCoupon?.code || null,
         address_snapshot: addressSnapshot,
         payment_method: paymentMethod,
         payment_status: 'pending',
@@ -125,6 +141,11 @@ export class OrdersService {
 
     // Clear cart
     await this.db.client.from('cart_items').delete().eq('cart_id', cart.id);
+
+    // Record coupon redemption (bumps used_count + logs to coupon_uses).
+    if (appliedCoupon) {
+      await this.coupons.redeem(appliedCoupon.id, order.id, userId);
+    }
 
     // Send confirmation email for COD (Razorpay orders are confirmed via webhook).
     if (paymentMethod === 'cod') {

@@ -23,7 +23,7 @@ export class PaymentsService {
       .from('orders').select('*').eq('id', orderId).single();
     if (!order) throw new BadRequestException('Order not found');
 
-    const amount = Math.round(order.total * 100); // paise
+    const amount = Math.round(order.total); // order.total is already stored in paise (Razorpay's unit)
 
     const response = await fetch('https://api.razorpay.com/v1/orders', {
       method: 'POST',
