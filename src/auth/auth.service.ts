@@ -64,12 +64,15 @@ export class AuthService {
       .update({ used: true })
       .eq('id', session.id);
 
-    let { data: user } = await this.db.client
-      .from('users')
-      .select('*')
-      .or(dto.phone ? `phone.eq.${dto.phone}` : `email.eq.${dto.email}`)
-      .single();
+    // Explicit, parameter-bound lookup (no string interpolation into the
+    // PostgREST .or() filter — avoids any filter-injection surface).
+    const baseQuery = this.db.client.from('users').select('*');
+    const { data: existing } = await (dto.phone
+      ? baseQuery.eq('phone', dto.phone)
+      : baseQuery.eq('email', dto.email)
+    ).maybeSingle();
 
+    let user = existing;
     if (!user) {
       const { data: newUser } = await this.db.client
         .from('users')
@@ -79,29 +82,72 @@ export class AuthService {
       user = newUser;
     }
 
-    const payload = { sub: user.id, role: user.role };
-    const access_token = this.jwt.sign(payload, { expiresIn: '15m' });
-    const refresh_token = this.jwt.sign(payload, {
-      secret: this.config.getOrThrow('JWT_REFRESH_SECRET'),
-      expiresIn: '30d',
-    });
+    const access_token = this.jwt.sign({ sub: user.id, role: user.role }, { expiresIn: '15m' });
+    // Refresh token carries the user's token_version; bumping that column
+    // (logout / revoke) invalidates every outstanding refresh token.
+    const refresh_token = this.jwt.sign(
+      { sub: user.id, role: user.role, tv: user.token_version ?? 0 },
+      { secret: this.config.getOrThrow('JWT_REFRESH_SECRET'), expiresIn: '30d' },
+    );
 
     return { access_token, refresh_token, user: { id: user.id, name: user.name, role: user.role } };
   }
 
   async refresh(token: string) {
     if (!token) throw new UnauthorizedException('No refresh token');
+    let payload: any;
+    try {
+      payload = this.jwt.verify(token, {
+        secret: this.config.getOrThrow('JWT_REFRESH_SECRET'),
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    // Revocation check: the token is only valid if its token_version still
+    // matches the user's current one. logout()/revoke bumps it, invalidating
+    // all previously issued refresh tokens (even though they haven't expired).
+    const { data: user } = await this.db.client
+      .from('users')
+      .select('role, token_version')
+      .eq('id', payload.sub)
+      .maybeSingle();
+
+    if (!user) throw new UnauthorizedException('User not found');
+    if ((user.token_version ?? 0) !== (payload.tv ?? 0)) {
+      throw new UnauthorizedException('Session revoked');
+    }
+
+    // Use the fresh DB role so a role change (e.g. promotion to admin) takes
+    // effect on the next refresh without forcing a full re-login.
+    const access_token = this.jwt.sign(
+      { sub: payload.sub, role: user.role },
+      { expiresIn: '15m' },
+    );
+    return { access_token };
+  }
+
+  /**
+   * Revoke every outstanding refresh token for a user by bumping token_version.
+   * Called on logout — after this, the cleared cookie's token would also fail
+   * the version check even if it were replayed.
+   */
+  async revokeAllSessions(userId: string) {
+    const { data: user } = await this.db.client
+      .from('users').select('token_version').eq('id', userId).maybeSingle();
+    const next = (user?.token_version ?? 0) + 1;
+    await this.db.client.from('users').update({ token_version: next }).eq('id', userId);
+  }
+
+  async logout(token?: string) {
+    if (!token) return;
     try {
       const payload = this.jwt.verify(token, {
         secret: this.config.getOrThrow('JWT_REFRESH_SECRET'),
       });
-      const access_token = this.jwt.sign(
-        { sub: payload.sub, role: payload.role },
-        { expiresIn: '15m' },
-      );
-      return { access_token };
+      await this.revokeAllSessions(payload.sub);
     } catch {
-      throw new UnauthorizedException('Invalid refresh token');
+      // Invalid/expired token — nothing to revoke.
     }
   }
 

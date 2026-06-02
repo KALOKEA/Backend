@@ -166,7 +166,11 @@ export class OrdersService {
           customer_name: addressSnapshot.name,
           order_id: order.order_number,
           total,
-          items: `${cartItems.length} item(s)`,
+          items: orderItems.map((it) => ({
+            name: it.snapshot_name,
+            quantity: it.quantity,
+            price: it.snapshot_price,
+          })),
         });
       }
     }

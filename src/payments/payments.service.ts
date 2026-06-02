@@ -81,7 +81,7 @@ export class PaymentsService {
 
       const { data: order } = await this.db.client
         .from('orders')
-        .select('*, users(email, name), order_items(variant_id, quantity)')
+        .select('*, users(email, name), order_items(variant_id, quantity, snapshot_name, snapshot_price)')
         .eq('razorpay_order_id', razorpayOrderId)
         .single();
 
@@ -117,7 +117,11 @@ export class PaymentsService {
             customer_name: (order.users as any)?.name || 'Customer',
             order_id: order.order_number,
             total: order.total,
-            items: 'your items',
+            items: ((order.order_items as any[]) || []).map((it) => ({
+              name: it.snapshot_name,
+              quantity: it.quantity,
+              price: it.snapshot_price,
+            })),
           });
         }
 

@@ -14,6 +14,11 @@ export class EmailService {
     this.senderName = this.config.get('BREVO_SENDER_NAME') || 'Kalokea';
   }
 
+  // All money is stored in paise; format to ₹ for display in emails.
+  private money(paise: number): string {
+    return `₹${(Math.round(paise) / 100).toLocaleString('en-IN')}`;
+  }
+
   private async send(to: string, subject: string, html: string): Promise<void> {
     if (!this.apiKey) {
       this.logger.warn(`Email not sent (no BREVO_API_KEY). To: ${to} | Subject: ${subject}`);
@@ -57,15 +62,32 @@ export class EmailService {
   async sendOrderConfirmation(to: string, vars: {
     customer_name: string;
     order_id: string;
-    total: number;
-    items: string;
+    total: number; // paise
+    items: Array<{ name: string; quantity: number; price: number }>; // price = line unit price in paise
   }): Promise<void> {
+    const rows = (vars.items || [])
+      .map(
+        (it) => `
+        <tr>
+          <td style="padding:6px 0;border-bottom:1px solid #eee">${it.name} × ${it.quantity}</td>
+          <td style="padding:6px 0;border-bottom:1px solid #eee;text-align:right">${this.money(it.price * it.quantity)}</td>
+        </tr>`,
+      )
+      .join('');
+
     const html = `
       <div style="font-family:sans-serif;max-width:600px;margin:0 auto">
         <h2>Order Confirmed! 🎉</h2>
         <p>Hi ${vars.customer_name}, your order <strong>#${vars.order_id}</strong> has been placed.</p>
-        <p>Items: ${vars.items}</p>
-        <p><strong>Total: ₹${vars.total}</strong></p>
+        <table style="width:100%;border-collapse:collapse;margin:16px 0">
+          <tbody>${rows}</tbody>
+          <tfoot>
+            <tr>
+              <td style="padding:10px 0;font-weight:bold">Total</td>
+              <td style="padding:10px 0;font-weight:bold;text-align:right">${this.money(vars.total)}</td>
+            </tr>
+          </tfoot>
+        </table>
         <p>We'll notify you when it ships.</p>
       </div>
     `;
@@ -102,10 +124,22 @@ export class EmailService {
         <h2>New Order #${vars.order_id}</h2>
         <p>Customer: ${vars.customer_name}</p>
         <p>Items: ${vars.items_count} | Payment: ${vars.payment_method}</p>
-        <p><strong>Total: ₹${vars.total}</strong></p>
+        <p><strong>Total: ${this.money(vars.total)}</strong></p>
       </div>
     `;
-    await this.send(adminEmail, `New Order — ₹${vars.total}`, html);
+    await this.send(adminEmail, `New Order — ${this.money(vars.total)}`, html);
+  }
+
+  async sendNewsletterWelcome(to: string): Promise<void> {
+    const html = `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto">
+        <h2 style="color:#0D0D0D">Welcome to Kalokea ✨</h2>
+        <p>Thanks for subscribing! You'll be first to hear about new arrivals,
+        exclusive offers, and style inspiration.</p>
+        <p style="color:#999;font-size:12px">You can unsubscribe anytime.</p>
+      </div>
+    `;
+    await this.send(to, 'Welcome to Kalokea ✨', html);
   }
 
   async sendLowStockAlert(vars: {

@@ -41,7 +41,10 @@ export class AuthController {
 
   @Public()
   @Post('logout')
-  logout(@Res({ passthrough: true }) res: Response) {
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    // Revoke server-side (bumps token_version) so the refresh token can't be
+    // replayed, then clear the cookie.
+    await this.auth.logout(req.cookies?.refresh_token);
     res.clearCookie('refresh_token');
     return { message: 'Logged out' };
   }

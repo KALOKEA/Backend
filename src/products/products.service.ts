@@ -13,22 +13,44 @@ export class ProductsService {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
 
+    // Resolve a category slug (sent by the shop UI) to its id. Unknown slug =>
+    // empty result rather than ignoring the filter.
+    let categoryId = query.category_id;
+    if (!categoryId && query.category_slug) {
+      const { data: cat } = await this.db.client
+        .from('categories').select('id').eq('slug', query.category_slug).single();
+      if (!cat) {
+        return { data: [], meta: { total: 0, page, limit, total_pages: 0 } };
+      }
+      categoryId = cat.id;
+    }
+
+    // Filtering by size/colour means "products that have a matching variant",
+    // which requires an INNER join on product_variants (default embed wouldn't
+    // exclude non-matching products).
+    const filterByVariant = !!(query.size || query.colour);
+    const variantSelect = filterByVariant
+      ? 'product_variants!inner(id, size, colour, price, stock, sku, is_active)'
+      : 'product_variants(id, size, colour, price, stock, sku, is_active)';
+
     let q = this.db.client
       .from('products')
       .select(`
         *,
         categories(id, name, slug),
         product_images(url, alt_text, is_primary, sort_order),
-        product_variants(id, size, colour, price, stock, sku, is_active)
+        ${variantSelect}
       `, { count: 'exact' })
       .eq('is_active', true)
       .range(from, to);
 
-    if (query.category_id) q = q.eq('category_id', query.category_id);
+    if (categoryId) q = q.eq('category_id', categoryId);
     if (query.featured === 'true') q = q.eq('is_featured', true);
     if (query.min_price) q = q.gte('base_price', query.min_price);
     if (query.max_price) q = q.lte('base_price', query.max_price);
     if (query.search) q = q.ilike('name', `%${query.search}%`);
+    if (query.size) q = q.eq('product_variants.size', query.size);
+    if (query.colour) q = q.eq('product_variants.colour', query.colour);
 
     if (query.sort === 'price_asc') q = q.order('base_price', { ascending: true });
     else if (query.sort === 'price_desc') q = q.order('base_price', { ascending: false });
