@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
 import { CouponsService } from '../coupons/coupons.service';
@@ -13,6 +14,7 @@ export class OrdersService {
     private db: DatabaseService,
     private email: EmailService,
     private coupons: CouponsService,
+    private config: ConfigService,
   ) {}
 
   private generateOrderNumber(): string {
@@ -232,5 +234,124 @@ export class OrdersService {
     }
 
     return { message: 'Status updated' };
+  }
+
+  /**
+   * Printable HTML invoice (GST breakdown) for an order. Ownership is enforced:
+   * a customer sees only their own orders; admins see any.
+   *
+   * GST is computed INCLUSIVE (Indian retail prices already include tax). Seller
+   * details and the rate come from env so nothing tax-related is hard-coded:
+   *   SELLER_NAME, SELLER_ADDRESS, SELLER_GSTIN, SELLER_STATE, GST_RATE (e.g. 5).
+   * Intra-state (buyer state == seller state) splits into CGST+SGST; otherwise
+   * IGST. Confirm the rate / HSN codes with your accountant before relying on it.
+   */
+  async getInvoice(id: string, user?: { id: string; role: string }): Promise<string> {
+    const { data: order } = await this.db.client
+      .from('orders')
+      .select('*, order_items(*)')
+      .eq('id', id)
+      .single();
+    if (!order) throw new NotFoundException('Order not found');
+
+    const isAdmin = user?.role === 'admin';
+    if (!isAdmin && order.user_id !== user?.id) {
+      throw new NotFoundException('Order not found');
+    }
+
+    const money = (paise: number) => `₹${(Math.round(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    const sellerName = this.config.get('SELLER_NAME') || 'KALOKEA';
+    const sellerAddress = this.config.get('SELLER_ADDRESS') || '';
+    const sellerGstin = this.config.get('SELLER_GSTIN') || '';
+    const sellerState = (this.config.get('SELLER_STATE') || '').toLowerCase();
+    const gstRate = Number(this.config.get('GST_RATE') ?? 5);
+
+    const addr = order.address_snapshot || {};
+    const buyerState = String(addr.state || '').toLowerCase();
+    const intraState = !!sellerState && sellerState === buyerState;
+
+    // Inclusive GST on the taxable goods value (subtotal less discount).
+    const taxable = Math.max(0, (order.subtotal || 0) - (order.discount || 0));
+    const netValue = Math.round(taxable / (1 + gstRate / 100));
+    const taxAmount = taxable - netValue;
+    const cgst = intraState ? Math.round(taxAmount / 2) : 0;
+    const sgst = intraState ? taxAmount - cgst : 0;
+    const igst = intraState ? 0 : taxAmount;
+
+    const rows = (order.order_items || [])
+      .map(
+        (it: any) => `
+        <tr>
+          <td>${esc(it.snapshot_name)}${it.snapshot_size ? ` (${esc(it.snapshot_size)})` : ''}</td>
+          <td style="text-align:center">${it.quantity}</td>
+          <td style="text-align:right">${money(it.snapshot_price)}</td>
+          <td style="text-align:right">${money(it.snapshot_price * it.quantity)}</td>
+        </tr>`,
+      )
+      .join('');
+
+    const taxRows = intraState
+      ? `<tr><td>CGST (${(gstRate / 2).toFixed(2)}%)</td><td style="text-align:right">${money(cgst)}</td></tr>
+         <tr><td>SGST (${(gstRate / 2).toFixed(2)}%)</td><td style="text-align:right">${money(sgst)}</td></tr>`
+      : `<tr><td>IGST (${gstRate.toFixed(2)}%)</td><td style="text-align:right">${money(igst)}</td></tr>`;
+
+    return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Invoice ${esc(order.order_number)}</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;color:#0a0a0a;max-width:760px;margin:0 auto;padding:32px;font-size:13px;}
+  h1{font-family:Georgia,serif;letter-spacing:4px;margin:0;}
+  .muted{color:#6b6b6b;}
+  table{width:100%;border-collapse:collapse;margin:18px 0;}
+  th,td{padding:8px 10px;border-bottom:1px solid #e8e4e0;text-align:left;}
+  th{background:#faf8f5;font-size:11px;text-transform:uppercase;letter-spacing:1px;}
+  .totals{width:280px;margin-left:auto;}
+  .totals td{border:none;padding:4px 10px;}
+  .grand{font-weight:bold;border-top:2px solid #0a0a0a;}
+  @media print{body{padding:0;}}
+</style></head>
+<body onload="window.focus()">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0a0a0a;padding-bottom:16px;">
+    <div><h1>KALOKEA</h1><p class="muted" style="margin:4px 0 0;">Tax Invoice</p></div>
+    <div style="text-align:right" class="muted">
+      <div><strong style="color:#0a0a0a">${esc(order.order_number)}</strong></div>
+      <div>${new Date(order.created_at).toLocaleDateString('en-IN')}</div>
+    </div>
+  </div>
+
+  <div style="display:flex;justify-content:space-between;margin-top:18px;gap:24px;">
+    <div>
+      <p style="margin:0 0 4px;"><strong>Sold by</strong></p>
+      <p class="muted" style="margin:0;">${esc(sellerName)}</p>
+      ${sellerAddress ? `<p class="muted" style="margin:0;">${esc(sellerAddress)}</p>` : ''}
+      ${sellerGstin ? `<p class="muted" style="margin:0;">GSTIN: ${esc(sellerGstin)}</p>` : ''}
+    </div>
+    <div style="text-align:right">
+      <p style="margin:0 0 4px;"><strong>Billed to</strong></p>
+      <p class="muted" style="margin:0;">${esc(addr.name)}</p>
+      <p class="muted" style="margin:0;">${esc(addr.line1)}${addr.line2 ? ', ' + esc(addr.line2) : ''}</p>
+      <p class="muted" style="margin:0;">${esc(addr.city)}, ${esc(addr.state)} ${esc(addr.pincode)}</p>
+    </div>
+  </div>
+
+  <table>
+    <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Amount</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+
+  <table class="totals">
+    <tr><td>Taxable value</td><td style="text-align:right">${money(netValue)}</td></tr>
+    ${taxRows}
+    ${order.discount ? `<tr><td>Discount</td><td style="text-align:right">- ${money(order.discount)}</td></tr>` : ''}
+    <tr><td>Shipping</td><td style="text-align:right">${money(order.shipping || 0)}</td></tr>
+    <tr class="grand"><td>Total</td><td style="text-align:right">${money(order.total)}</td></tr>
+  </table>
+
+  <p class="muted" style="margin-top:24px;font-size:11px;">
+    All prices are inclusive of GST. This is a computer-generated invoice.
+    To save as PDF, use your browser&rsquo;s Print &rarr; Save as PDF.
+  </p>
+</body></html>`;
   }
 }

@@ -22,6 +22,7 @@ import { ReturnsModule } from './returns/returns.module';
 import { UploadModule } from './upload/upload.module';
 import { AdminModule } from './admin/admin.module';
 import { NewsletterModule } from './newsletter/newsletter.module';
+import { FeedModule } from './feed/feed.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { validate } from './config/env.validation';
 
@@ -52,6 +53,7 @@ import { validate } from './config/env.validation';
     UploadModule,
     AdminModule,
     NewsletterModule,
+    FeedModule,
   ],
   providers: [
     // ThrottlerGuard runs first so rate limits apply even to auth/public routes.

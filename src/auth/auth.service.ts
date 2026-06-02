@@ -56,8 +56,27 @@ export class AuthService {
       throw new UnauthorizedException('OTP expired or not found');
 
     const session = sessions[0];
+
+    // Per-session brute-force lock (IP-independent): after MAX_ATTEMPTS wrong
+    // guesses the session is consumed, so a new code must be requested. This
+    // closes the rotating-IP bypass of the per-IP throttler.
+    const MAX_ATTEMPTS = 5;
+    if ((session.attempts ?? 0) >= MAX_ATTEMPTS) {
+      await this.db.client.from('otp_sessions').update({ used: true }).eq('id', session.id);
+      throw new UnauthorizedException('Too many attempts. Please request a new code.');
+    }
+
     const valid = await bcrypt.compare(dto.otp, session.otp_hash);
-    if (!valid) throw new UnauthorizedException('Invalid OTP');
+    if (!valid) {
+      const attempts = (session.attempts ?? 0) + 1;
+      await this.db.client
+        .from('otp_sessions')
+        .update({ attempts, ...(attempts >= MAX_ATTEMPTS ? { used: true } : {}) })
+        .eq('id', session.id);
+      throw new UnauthorizedException(
+        attempts >= MAX_ATTEMPTS ? 'Too many attempts. Please request a new code.' : 'Invalid OTP',
+      );
+    }
 
     await this.db.client
       .from('otp_sessions')

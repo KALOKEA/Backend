@@ -31,6 +31,11 @@ export class OrdersController {
     return this.orders.findAll(user.id, +page, +limit);
   }
 
+  @Get(':id/invoice')
+  getInvoice(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.orders.getInvoice(id, user);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
     return this.orders.findOne(id, user);
