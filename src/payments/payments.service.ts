@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, Logger, RawBodyRequest } from '@nestjs
 import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
+import { GstService } from '../gst/gst.service';
 import * as crypto from 'crypto';
 import { Request } from 'express';
 
@@ -13,6 +14,7 @@ export class PaymentsService {
     private db: DatabaseService,
     private config: ConfigService,
     private email: EmailService,
+    private gst: GstService,
   ) {}
 
   async createRazorpayOrder(orderId: string) {
@@ -94,6 +96,10 @@ export class PaymentsService {
           status: 'confirmed',
           razorpay_payment_id: payment.id,
         }).eq('id', order.id);
+
+        // Record the sale in the GST ledger (online orders post here, not at
+        // creation — only a captured payment is a committed taxable sale).
+        await this.gst.postSaleLedger(order.id);
 
         // Deduct stock now that payment is captured (online orders skip the
         // decrement at order creation — see OrdersService.createOrder).

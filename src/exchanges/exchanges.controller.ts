@@ -1,0 +1,40 @@
+import { Controller, Get, Post, Patch, Body, Param, UseGuards } from '@nestjs/common';
+import { ExchangesService } from './exchanges.service';
+import { CreateExchangeDto } from './dto/create-exchange.dto';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AdminGuard } from '../common/guards/admin.guard';
+
+@Controller('exchanges')
+export class ExchangesController {
+  constructor(private exchanges: ExchangesService) {}
+
+  @Post()
+  create(@Body() dto: CreateExchangeDto, @CurrentUser() user: any) {
+    return this.exchanges.create(dto, user.id);
+  }
+
+  @Get('my')
+  findByUser(@CurrentUser() user: any) {
+    return this.exchanges.findByUser(user.id);
+  }
+
+  @Get('options/:orderItemId')
+  getOptions(@Param('orderItemId') orderItemId: string, @CurrentUser() user: any) {
+    return this.exchanges.getOptions(orderItemId, user.id);
+  }
+
+  @UseGuards(AdminGuard)
+  @Get()
+  findAll() {
+    return this.exchanges.findAll();
+  }
+
+  @UseGuards(AdminGuard)
+  @Patch(':id/status')
+  updateStatus(
+    @Param('id') id: string,
+    @Body() body: { status: string; admin_notes?: string },
+  ) {
+    return this.exchanges.updateStatus(id, body.status, body.admin_notes);
+  }
+}

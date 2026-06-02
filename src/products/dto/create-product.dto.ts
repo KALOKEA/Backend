@@ -41,4 +41,14 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   meta_description?: string;
+
+  // GST: HSN code + per-product rate (e.g. 5 / 12 / 18). Leave rate empty to use
+  // the store-wide default from Settings.
+  @IsOptional()
+  @IsString()
+  hsn_code?: string;
+
+  @IsOptional()
+  @IsNumber()
+  gst_rate?: number;
 }

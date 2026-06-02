@@ -22,6 +22,15 @@ export class OrdersController {
     return this.orders.createOrder(dto, user?.id);
   }
 
+  // Non-persisting price + GST quote for the checkout summary, so the tax the
+  // customer sees matches exactly what they'll be charged.
+  @Public()
+  @UseGuards(OptionalJwtAuthGuard)
+  @Post('quote')
+  quote(@Body() dto: CreateOrderDto, @CurrentUser() user: any) {
+    return this.orders.quote(dto, user?.id);
+  }
+
   @Get('my')
   getMyOrders(
     @CurrentUser() user: any,

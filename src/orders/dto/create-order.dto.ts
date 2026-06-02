@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsObject, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsObject, IsUUID, IsBoolean } from 'class-validator';
 
 export class CreateOrderDto {
   @IsOptional()
@@ -41,4 +41,17 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   guest_email?: string;
+
+  // B2B GST invoice (optional): buyer wants their company GSTIN on the invoice.
+  @IsOptional()
+  @IsBoolean()
+  gst_invoice?: boolean;
+
+  @IsOptional()
+  @IsString()
+  company_name?: string;
+
+  @IsOptional()
+  @IsString()
+  gstin?: string;
 }

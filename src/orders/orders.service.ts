@@ -1,10 +1,15 @@
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { SettingsService } from '../settings/settings.service';
+import { GstService } from '../gst/gst.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
+
+const SHIPPING_FREE_THRESHOLD = 99900; // ₹999 (paise)
+const SHIPPING_FEE = 4900; // ₹49
+const COD_FEE = 4900; // ₹49
 
 @Injectable()
 export class OrdersService {
@@ -15,17 +20,18 @@ export class OrdersService {
     private email: EmailService,
     private coupons: CouponsService,
     private settings: SettingsService,
+    private gst: GstService,
   ) {}
 
   private generateOrderNumber(): string {
     return `KLK-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
   }
 
-  async createOrder(dto: CreateOrderDto, userId?: string) {
-    // Get cart items
+  /** Load the (single) cart for a user or guest session. */
+  private async loadCart(userId?: string, sessionId?: string) {
     let cartQuery = this.db.client.from('carts').select('id');
     if (userId) cartQuery = cartQuery.eq('user_id', userId);
-    else if (dto.session_id) cartQuery = cartQuery.eq('session_id', dto.session_id).is('user_id', null);
+    else if (sessionId) cartQuery = cartQuery.eq('session_id', sessionId).is('user_id', null);
     else throw new BadRequestException('User or session required');
 
     const { data: cart } = await cartQuery.single();
@@ -36,15 +42,172 @@ export class OrdersService {
       .select(`
         quantity,
         product_variants(id, sku, size, colour, price, stock,
-          products(name, product_images(url, is_primary)))
+          products(name, hsn_code, gst_rate, product_images(url, is_primary)))
       `)
       .eq('cart_id', cart.id);
 
     if (!cartItems || cartItems.length === 0) throw new BadRequestException('Cart is empty');
+    return { cart, cartItems };
+  }
 
-    // Resolve the delivery address into a snapshot.
-    // Logged-in users send address_id (we load + verify ownership, since the
-    // service-role key bypasses RLS). Guests may send address_snapshot directly.
+  /**
+   * Core money + GST engine (EXCLUSIVE model). Builds per-line snapshots with
+   * proportional discount allocation, resolves each product's GST rate (per-HSN
+   * slab, store default as fallback), and computes the CGST/SGST/IGST split for
+   * the buyer's place of supply. Returns everything both createOrder and quote
+   * need. No persistence.
+   */
+  private async computeBreakdown(params: {
+    cartItems: any[];
+    discount: number;
+    paymentMethod: 'cod' | 'razorpay';
+    buyerState?: string;
+    checkStock?: boolean;
+  }) {
+    const { cartItems, discount, paymentMethod, buyerState, checkStock } = params;
+    const settings = await this.settings.get();
+    const defaultRate = Number(settings.gst_rate) || 0;
+    const intraState = this.gst.isIntraState(buyerState, settings.seller_state);
+
+    // 1. Pre-tax line subtotals.
+    let subtotal = 0;
+    const lines = cartItems.map((item: any) => {
+      const variant = item.product_variants;
+      const product = variant.products;
+      if (checkStock && (variant.stock == null || variant.stock < item.quantity)) {
+        throw new BadRequestException(
+          `Insufficient stock for ${product?.name || 'item'}${variant.size ? ` (${variant.size})` : ''}`,
+        );
+      }
+      const lineSubtotal = variant.price * item.quantity;
+      subtotal += lineSubtotal;
+      const primaryImage =
+        product.product_images?.find((i: any) => i.is_primary)?.url ||
+        product.product_images?.[0]?.url;
+      return {
+        variant,
+        product,
+        quantity: item.quantity,
+        lineSubtotal,
+        rate: this.gst.resolveRate(product.gst_rate, defaultRate),
+        hsn_code: product.hsn_code || null,
+        primaryImage,
+      };
+    });
+
+    const cappedDiscount = Math.min(discount, subtotal);
+
+    // 2. Allocate the order-level discount across lines (proportional to value),
+    //    then compute per-line taxable value + GST (exclusive, added on top).
+    let allocated = 0;
+    let taxableTotal = 0;
+    let gstTotal = 0;
+    const orderItems = lines.map((l, idx) => {
+      const lineDiscount =
+        idx === lines.length - 1
+          ? cappedDiscount - allocated
+          : subtotal > 0
+            ? Math.round((cappedDiscount * l.lineSubtotal) / subtotal)
+            : 0;
+      if (idx !== lines.length - 1) allocated += lineDiscount;
+      const taxable = l.lineSubtotal - lineDiscount;
+      const gstAmount = this.gst.taxOn(taxable, l.rate);
+      taxableTotal += taxable;
+      gstTotal += gstAmount;
+      return {
+        variant_id: l.variant.id,
+        snapshot_name: l.product.name,
+        snapshot_sku: l.variant.sku,
+        snapshot_size: l.variant.size,
+        snapshot_colour: l.variant.colour,
+        snapshot_price: l.variant.price,
+        snapshot_image_url: l.primaryImage,
+        quantity: l.quantity,
+        hsn_code: l.hsn_code,
+        gst_rate: l.rate,
+        taxable_value: taxable,
+        gst_amount: gstAmount,
+      };
+    });
+
+    const { cgst, sgst, igst } = this.gst.splitTax(gstTotal, intraState);
+    const shipping = subtotal >= SHIPPING_FREE_THRESHOLD ? 0 : SHIPPING_FEE;
+    const codFee = paymentMethod === 'cod' ? COD_FEE : 0;
+    // Total = taxable goods value + GST + shipping + COD fee. (Shipping is not
+    // taxed here — confirm treatment with your CA if you want GST on freight.)
+    const total = taxableTotal + gstTotal + shipping + codFee;
+
+    return {
+      orderItems,
+      subtotal,
+      discount: cappedDiscount,
+      taxable_value: taxableTotal,
+      total_gst: gstTotal,
+      cgst,
+      sgst,
+      igst,
+      gst_rate: defaultRate,
+      intraState,
+      buyerState: buyerState || null,
+      shipping,
+      cod_fee: codFee,
+      total,
+    };
+  }
+
+  /**
+   * Non-persisting price quote for the checkout summary. Returns the exact
+   * GST + totals the customer will be charged, so the displayed tax matches the
+   * order. Buyer state (for the CGST/SGST vs IGST split) is taken from the
+   * chosen address when available.
+   */
+  async quote(dto: CreateOrderDto, userId?: string) {
+    const { cartItems } = await this.loadCart(userId, dto.session_id);
+
+    let buyerState = dto.address_snapshot?.state;
+    if (!buyerState && dto.address_id && userId) {
+      const { data: address } = await this.db.client
+        .from('addresses').select('state').eq('id', dto.address_id).eq('user_id', userId).single();
+      buyerState = address?.state;
+    }
+
+    let discount = 0;
+    let couponError: string | null = null;
+    const subtotalRaw = cartItems.reduce(
+      (s: number, it: any) => s + it.product_variants.price * it.quantity, 0);
+    if (dto.coupon_code) {
+      try {
+        const result = await this.coupons.validate({ code: dto.coupon_code, order_value: subtotalRaw });
+        discount = result.discount;
+      } catch (e: any) {
+        couponError = e?.message || 'Invalid coupon';
+      }
+    }
+
+    const paymentMethod = dto.payment_method === 'cod' ? 'cod' : 'razorpay';
+    const b = await this.computeBreakdown({ cartItems, discount, paymentMethod, buyerState });
+    return {
+      subtotal: b.subtotal,
+      discount: b.discount,
+      taxable_value: b.taxable_value,
+      total_gst: b.total_gst,
+      cgst: b.cgst,
+      sgst: b.sgst,
+      igst: b.igst,
+      intra_state: b.intraState,
+      place_of_supply: b.buyerState,
+      shipping: b.shipping,
+      cod_fee: b.cod_fee,
+      total: b.total,
+      coupon_error: couponError,
+    };
+  }
+
+  async createOrder(dto: CreateOrderDto, userId?: string) {
+    const { cart, cartItems } = await this.loadCart(userId, dto.session_id);
+
+    // Resolve the delivery address into a snapshot. Logged-in users send
+    // address_id (loaded + ownership-checked); guests send address_snapshot.
     let addressSnapshot = dto.address_snapshot;
     if (dto.address_id) {
       if (!userId) throw new BadRequestException('Login required to use a saved address');
@@ -59,52 +222,30 @@ export class OrdersService {
     }
     if (!addressSnapshot) throw new BadRequestException('Delivery address required');
 
-    // Normalize payment method. The storefront offers upi/card/netbanking/wallet,
-    // but those are all Razorpay sub-methods — only COD is a distinct gateway.
     const paymentMethod = dto.payment_method === 'cod' ? 'cod' : 'razorpay';
 
-    // Calculate totals
-    let subtotal = 0;
-    const orderItems = cartItems.map((item: any) => {
-      const variant = item.product_variants;
-      const product = variant.products;
-      const price = variant.price;
-      // Guard against overselling / negative stock
-      if (variant.stock == null || variant.stock < item.quantity) {
-        throw new BadRequestException(
-          `Insufficient stock for ${product?.name || 'item'}${variant.size ? ` (${variant.size})` : ''}`,
-        );
-      }
-      subtotal += price * item.quantity;
-      const primaryImage = product.product_images?.find((i: any) => i.is_primary)?.url || product.product_images?.[0]?.url;
-      return {
-        variant_id: variant.id,
-        snapshot_name: product.name,
-        snapshot_sku: variant.sku,
-        snapshot_size: variant.size,
-        snapshot_colour: variant.colour,
-        snapshot_price: price,
-        snapshot_image_url: primaryImage,
-        quantity: item.quantity,
-      };
-    });
-
-    // Apply coupon (server-authoritative — the client-side discount is display only).
+    // Server-authoritative coupon (client discount is display-only).
     let discount = 0;
     let appliedCoupon: { id: string; code: string } | null = null;
     if (dto.coupon_code) {
-      const result = await this.coupons.validate({ code: dto.coupon_code, order_value: subtotal });
-      discount = Math.min(result.discount, subtotal);
+      const subtotalRaw = cartItems.reduce(
+        (s: number, it: any) => s + it.product_variants.price * it.quantity, 0);
+      const result = await this.coupons.validate({ code: dto.coupon_code, order_value: subtotalRaw });
+      discount = result.discount;
       appliedCoupon = { id: result.coupon_id, code: result.code };
     }
 
-    // All money is in paise (matches the storefront + Razorpay).
-    // Free shipping over ₹999; otherwise ₹49 shipping. COD adds a ₹49 fee.
-    const shipping = subtotal >= 99900 ? 0 : 4900;
-    const cod_fee = paymentMethod === 'cod' ? 4900 : 0;
-    const total = Math.max(0, subtotal - discount) + shipping + cod_fee;
+    const b = await this.computeBreakdown({
+      cartItems,
+      discount,
+      paymentMethod,
+      buyerState: addressSnapshot.state,
+      checkStock: true,
+    });
 
-    // Create order
+    const wantsGstInvoice = !!dto.gst_invoice && !!dto.gstin;
+
+    // Create order (GST snapshot persisted so invoices/ledger never recompute).
     const { data: order, error } = await this.db.client
       .from('orders')
       .insert({
@@ -112,10 +253,19 @@ export class OrdersService {
         user_id: userId || null,
         guest_phone: dto.guest_phone || null,
         guest_email: dto.guest_email || null,
-        subtotal,
-        shipping: shipping + cod_fee,
-        discount,
-        total,
+        subtotal: b.subtotal,
+        shipping: b.shipping + b.cod_fee,
+        discount: b.discount,
+        taxable_value: b.taxable_value,
+        cgst: b.cgst,
+        sgst: b.sgst,
+        igst: b.igst,
+        total_gst: b.total_gst,
+        place_of_supply: addressSnapshot.state || null,
+        is_intra_state: b.intraState,
+        gstin: wantsGstInvoice ? dto.gstin : null,
+        company_name: wantsGstInvoice ? dto.company_name || null : null,
+        total: b.total,
         coupon_id: appliedCoupon?.id || null,
         coupon_code: appliedCoupon?.code || null,
         address_snapshot: addressSnapshot,
@@ -128,16 +278,11 @@ export class OrdersService {
 
     if (error) throw error;
 
-    // Insert order items
     await this.db.client.from('order_items').insert(
-      orderItems.map(item => ({ ...item, order_id: order.id }))
+      b.orderItems.map((item) => ({ ...item, order_id: order.id })),
     );
 
-    // Reduce stock.
-    // COD orders are committed immediately, so we deduct now.
-    // Razorpay (online) orders deduct stock ONLY on payment.captured (see
-    // PaymentsService.handleWebhook) — otherwise abandoned/failed online orders
-    // would permanently consume inventory with no real purchase.
+    // Stock: COD deducts now; Razorpay deducts on payment.captured (webhook).
     if (paymentMethod === 'cod') {
       for (const item of cartItems as any[]) {
         await this.db.client
@@ -147,16 +292,17 @@ export class OrdersService {
       }
     }
 
-    // Clear cart
     await this.db.client.from('cart_items').delete().eq('cart_id', cart.id);
 
-    // Record coupon redemption (bumps used_count + logs to coupon_uses).
     if (appliedCoupon) {
       await this.coupons.redeem(appliedCoupon.id, order.id, userId);
     }
 
-    // Send confirmation email for COD (Razorpay orders are confirmed via webhook).
+    // COD is a committed sale → confirmation email + GST ledger now.
+    // Razorpay records the sale in the ledger on payment.captured (webhook).
     if (paymentMethod === 'cod') {
+      await this.gst.postSaleLedger(order.id);
+
       let recipientEmail = dto.guest_email;
       if (!recipientEmail && userId) {
         const { data: u } = await this.db.client
@@ -167,8 +313,8 @@ export class OrdersService {
         await this.email.sendOrderConfirmation(recipientEmail, {
           customer_name: addressSnapshot.name,
           order_id: order.order_number,
-          total,
-          items: orderItems.map((it) => ({
+          total: order.total,
+          items: b.orderItems.map((it) => ({
             name: it.snapshot_name,
             quantity: it.quantity,
             price: it.snapshot_price,
@@ -203,9 +349,6 @@ export class OrdersService {
       .single();
     if (error || !data) throw new NotFoundException('Order not found');
 
-    // Ownership enforcement (Supabase uses the service key, so RLS is bypassed —
-    // authorization MUST be enforced here). Admins may view any order; a regular
-    // user may only view their own. Return 404 (not 403) to avoid leaking existence.
     const isAdmin = user?.role === 'admin';
     if (!isAdmin && data.user_id !== user?.id) {
       throw new NotFoundException('Order not found');
@@ -220,7 +363,6 @@ export class OrdersService {
 
     await this.db.client.from('orders').update({ status: dto.status }).eq('id', id);
 
-    // Send ship email
     if (dto.status === 'shipped' && dto.tracking_number) {
       const userEmail = (order.users as any)?.email;
       if (userEmail) {
@@ -237,14 +379,10 @@ export class OrdersService {
   }
 
   /**
-   * Printable HTML invoice (GST breakdown) for an order. Ownership is enforced:
-   * a customer sees only their own orders; admins see any.
-   *
-   * GST is computed INCLUSIVE (Indian retail prices already include tax). Seller
-   * details and the rate come from env so nothing tax-related is hard-coded:
-   *   SELLER_NAME, SELLER_ADDRESS, SELLER_GSTIN, SELLER_STATE, GST_RATE (e.g. 5).
-   * Intra-state (buyer state == seller state) splits into CGST+SGST; otherwise
-   * IGST. Confirm the rate / HSN codes with your accountant before relying on it.
+   * Printable HTML tax invoice. GST is EXCLUSIVE and read from the order's
+   * persisted snapshot (taxable_value / cgst / sgst / igst / total_gst), so a
+   * historical invoice never changes if the store rate later changes. Seller
+   * details come from admin Settings. Ownership enforced (customer = own only).
    */
   async getInvoice(id: string, user?: { id: string; role: string }): Promise<string> {
     const { data: order } = await this.db.client
@@ -259,46 +397,44 @@ export class OrdersService {
       throw new NotFoundException('Order not found');
     }
 
-    const money = (paise: number) => `₹${(Math.round(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-    const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const money = (paise: number) =>
+      `₹${(Math.round(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const esc = (s: any) =>
+      String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-    // Seller / GST details come from admin-editable settings (Settings page),
-    // not env — so they can be changed without a redeploy.
     const settings = await this.settings.get();
     const sellerName = settings.seller_name || 'KALOKEA';
     const sellerAddress = settings.seller_address || '';
     const sellerGstin = settings.seller_gstin || '';
-    const sellerState = (settings.seller_state || '').toLowerCase();
-    const gstRate = Number(settings.gst_rate) || 5;
 
     const addr = order.address_snapshot || {};
-    const buyerState = String(addr.state || '').toLowerCase();
-    const intraState = !!sellerState && sellerState === buyerState;
-
-    // Inclusive GST on the taxable goods value (subtotal less discount).
-    const taxable = Math.max(0, (order.subtotal || 0) - (order.discount || 0));
-    const netValue = Math.round(taxable / (1 + gstRate / 100));
-    const taxAmount = taxable - netValue;
-    const cgst = intraState ? Math.round(taxAmount / 2) : 0;
-    const sgst = intraState ? taxAmount - cgst : 0;
-    const igst = intraState ? 0 : taxAmount;
+    const intraState = !!order.is_intra_state;
+    const taxable = Number(order.taxable_value) || 0;
+    const totalGst = Number(order.total_gst) || 0;
+    const cgst = Number(order.cgst) || 0;
+    const sgst = Number(order.sgst) || 0;
+    const igst = Number(order.igst) || 0;
 
     const rows = (order.order_items || [])
-      .map(
-        (it: any) => `
+      .map((it: any) => {
+        const lineGst = Number(it.gst_amount) || 0;
+        return `
         <tr>
           <td>${esc(it.snapshot_name)}${it.snapshot_size ? ` (${esc(it.snapshot_size)})` : ''}</td>
+          <td style="text-align:center">${esc(it.hsn_code || '-')}</td>
           <td style="text-align:center">${it.quantity}</td>
           <td style="text-align:right">${money(it.snapshot_price)}</td>
-          <td style="text-align:right">${money(it.snapshot_price * it.quantity)}</td>
-        </tr>`,
-      )
+          <td style="text-align:center">${Number(it.gst_rate) || 0}%</td>
+          <td style="text-align:right">${money(lineGst)}</td>
+          <td style="text-align:right">${money((Number(it.taxable_value) || 0) + lineGst)}</td>
+        </tr>`;
+      })
       .join('');
 
     const taxRows = intraState
-      ? `<tr><td>CGST (${(gstRate / 2).toFixed(2)}%)</td><td style="text-align:right">${money(cgst)}</td></tr>
-         <tr><td>SGST (${(gstRate / 2).toFixed(2)}%)</td><td style="text-align:right">${money(sgst)}</td></tr>`
-      : `<tr><td>IGST (${gstRate.toFixed(2)}%)</td><td style="text-align:right">${money(igst)}</td></tr>`;
+      ? `<tr><td>CGST</td><td style="text-align:right">${money(cgst)}</td></tr>
+         <tr><td>SGST</td><td style="text-align:right">${money(sgst)}</td></tr>`
+      : `<tr><td>IGST</td><td style="text-align:right">${money(igst)}</td></tr>`;
 
     return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><title>Invoice ${esc(order.order_number)}</title>
@@ -309,7 +445,7 @@ export class OrdersService {
   table{width:100%;border-collapse:collapse;margin:18px 0;}
   th,td{padding:8px 10px;border-bottom:1px solid #e8e4e0;text-align:left;}
   th{background:#faf8f5;font-size:11px;text-transform:uppercase;letter-spacing:1px;}
-  .totals{width:280px;margin-left:auto;}
+  .totals{width:300px;margin-left:auto;}
   .totals td{border:none;padding:4px 10px;}
   .grand{font-weight:bold;border-top:2px solid #0a0a0a;}
   @media print{body{padding:0;}}
@@ -332,28 +468,34 @@ export class OrdersService {
     </div>
     <div style="text-align:right">
       <p style="margin:0 0 4px;"><strong>Billed to</strong></p>
-      <p class="muted" style="margin:0;">${esc(addr.name)}</p>
+      <p class="muted" style="margin:0;">${esc(order.company_name || addr.name)}</p>
       <p class="muted" style="margin:0;">${esc(addr.line1)}${addr.line2 ? ', ' + esc(addr.line2) : ''}</p>
       <p class="muted" style="margin:0;">${esc(addr.city)}, ${esc(addr.state)} ${esc(addr.pincode)}</p>
+      ${order.gstin ? `<p class="muted" style="margin:0;">GSTIN: ${esc(order.gstin)}</p>` : ''}
     </div>
   </div>
 
   <table>
-    <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Amount</th></tr></thead>
+    <thead><tr>
+      <th>Item</th><th style="text-align:center">HSN</th><th style="text-align:center">Qty</th>
+      <th style="text-align:right">Price</th><th style="text-align:center">GST</th>
+      <th style="text-align:right">Tax</th><th style="text-align:right">Amount</th>
+    </tr></thead>
     <tbody>${rows}</tbody>
   </table>
 
   <table class="totals">
-    <tr><td>Taxable value</td><td style="text-align:right">${money(netValue)}</td></tr>
+    <tr><td>Taxable value</td><td style="text-align:right">${money(taxable)}</td></tr>
     ${taxRows}
+    <tr><td>Total GST</td><td style="text-align:right">${money(totalGst)}</td></tr>
     ${order.discount ? `<tr><td>Discount</td><td style="text-align:right">- ${money(order.discount)}</td></tr>` : ''}
     <tr><td>Shipping</td><td style="text-align:right">${money(order.shipping || 0)}</td></tr>
     <tr class="grand"><td>Total</td><td style="text-align:right">${money(order.total)}</td></tr>
   </table>
 
   <p class="muted" style="margin-top:24px;font-size:11px;">
-    All prices are inclusive of GST. This is a computer-generated invoice.
-    To save as PDF, use your browser&rsquo;s Print &rarr; Save as PDF.
+    Prices are exclusive of GST; tax is shown separately above. This is a
+    computer-generated invoice. To save as PDF, use your browser&rsquo;s Print &rarr; Save as PDF.
   </p>
 </body></html>`;
   }
