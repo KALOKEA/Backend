@@ -22,10 +22,12 @@ import { ReturnsModule } from './returns/returns.module';
 import { UploadModule } from './upload/upload.module';
 import { AdminModule } from './admin/admin.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { validate } from './config/env.validation';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    // validate => fail-fast on missing required secrets (see config/env.validation.ts)
+    ConfigModule.forRoot({ isGlobal: true, validate }),
     // Global rate limiting: max 100 requests per minute per IP by default.
     // Sensitive endpoints (e.g. OTP) tighten this further via @Throttle().
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),

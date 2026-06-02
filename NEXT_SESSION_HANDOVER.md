@@ -1,43 +1,53 @@
-# KALOKEA — Session Handover & Roadmap (paste this to start next session)
+# KALOKEA — Session Handover & Roadmap (paste this whole file as your first message)
 
 ## Project context
-- E-commerce site. Two repos, both local + on GitHub (KALOKEA/Frontend, KALOKEA/Backend).
-- Paths: `C:\KALOKEA\FRONTEND` and `C:\KALOKEA\BACKEND`.
-- Frontend: Next.js 14.2.35, App Router, **static export** (`output: 'export'`) → Cloudflare Pages. Deploy = `git push origin develop:main`.
-- Backend: NestJS 10 + Supabase (service-role key, RLS bypassed) + Razorpay + Brevo → Railway. Deploy = `git push` to main.
-- Design follows the client HTML mockup: rose accent `#c8a4a5`, black `#0a0a0a`, cream, serif/sans. (NOTE: master plan said gold `#B8860B`/Cormorant — the code follows the mockup instead. Confirm which is canonical.)
+- Women's fashion e-commerce. Two repos, local + GitHub.
+  - Frontend: `C:\KALOKEA\FRONTEND` → https://github.com/KALOKEA/Frontend → Cloudflare Pages. Deploy = `git push origin develop:main`.
+  - Backend: `C:\KALOKEA\BACKEND` → https://github.com/KALOKEA/Backend → Railway. Deploy = `git push origin develop:main` (also push `develop`).
+- Frontend: Next.js 14.2.35, App Router, static export (`output:'export'`, build dir `out`), Tailwind, Zustand.
+- Backend: NestJS 10 + Supabase (service-role key, RLS bypassed in code) + Razorpay + Brevo. Supabase project ref `ygxbqdwtaryciskskokc`.
+- Live: backend https://backend-production-73aa.up.railway.app/health · frontend on pages.dev (kalokea.in not purchased yet).
+- Design follows client mockup: rose `#c8a4a5`, black `#0a0a0a`, cream. (Master plan said gold/Cormorant — code follows the mockup. Still unconfirmed which is canonical.)
 
-## Current state: ~52% complete
-**Working:** backend bootstrap (helmet, CORS, validation, rate limiting, JWT+refresh, OTP), all backend modules/CRUD, product/shop/cart/account pages, security hardening (IDOR fix, throttler, timing-safe webhook, CSP headers).
+## HOW WE WORK (read first)
+- The Linux shell is often DOWN in this environment — assume Claude edits files; YOU run `npm install` / `npm run build` / `git`, and paste errors back.
+- PowerShell does NOT accept `&&`. Run git commands one per line (or use `;`).
+- Backend build check: `npm run build` (tsc). Frontend: `npm run build` (next build).
+- Deploy each repo: `git add -A` → `git commit -m "..."` → `git push origin develop` → `git push origin develop:main`. Do NOT `git push origin main` (local main is stale → non-fast-forward).
+- After any manual Supabase SQL: re-run the `GRANT ALL ... TO service_role` block or the API 403s.
+- MONEY IS IN PAISE everywhere (DB, backend, frontend, Razorpay). ₹1 = 100 paise. Never multiply by 100 for Razorpay (order.total is already paise).
 
-## CRITICAL BLOCKERS (do these first — they break core flow)
-1. **DB schema is empty.** `src/database/migrations/001_initial_schema.sql` is 0 bytes. No reproducible database exists. Must be written (all tables: users, otp_sessions, categories, products, product_images, product_variants, carts, cart_items, addresses, orders, order_items, coupons, coupon_uses, reviews, wishlists, banners, returns, newsletter_subscribers, admin_activity_log).
-2. **Checkout is broken.** Frontend sends `address_id` to `POST /orders`, but backend `CreateOrderDto` expects `address_snapshot` (object). No code resolves one to the other → every online order fails validation. Fix backend to load the address by id and snapshot it.
-3. **Coupons silently ignored.** `ordersApi.create()` and the DTO accept `coupon_code`, but `orders.service.ts` never processes it — discounts don't apply. Wire coupon validation + discount into order totals.
-4. **Cart never touches the backend.** Frontend cart is Zustand-local only; backend cart API + merge-on-login exist but are unused. Stock isn't re-validated until order creation. Wire frontend cart → backend, and merge guest cart on login.
-5. **Auth lost on refresh.** `useAuthStore` has no persist + no bootstrap call to `/auth/me` (via refresh cookie) on app load → user is logged out on every hard refresh. Add session restore on load.
-6. **Admin panel unusable.** Only `/admin` dashboard exists. The 9 sub-pages are missing (products, orders, inventory, coupons, banners, customers, reviews, returns, analytics) — sidebar links 404. Backend admin endpoints partly exist; build the pages.
+## DONE IN SESSION 2 (2026-06-01) — all pushed + deployed green
+1. **DB schema (#1)** — wrote full `BACKEND/src/database/migrations/001_initial_schema.sql`: 19 tables (users, otp_sessions, categories, products, product_images, product_variants, carts, cart_items, addresses, coupons, orders, order_items, coupon_uses, reviews, wishlists, banners, returns, newsletter_subscribers, admin_activity_log) with FKs, indexes, updated_at triggers, RLS enabled, service_role GRANTs. RAN in Supabase SQL editor — tables live.
+2. **Checkout (#2)** — `create-order.dto.ts` now accepts `address_id` (was rejected by `forbidNonWhitelisted`); `orders.service.ts` loads the address by id with a `user_id` ownership check and snapshots it; `address_snapshot` optional for guests; `payment_method` normalized to `razorpay`/`cod`; COD confirmation email now also reaches logged-in buyers.
+3. **Coupons (#3)** — `coupons.service.ts` `validate()` returns `{valid:true, discount_amount, ...}` (fixed the FE contract that always showed "invalid"); added `redeem()`; `createOrder` validates the code, applies discount (capped at subtotal), persists `discount`/`coupon_id`/`coupon_code`, records `coupon_uses`; `OrdersModule` imports `CouponsModule`.
+4. **MONEY-UNITS BUG (found + fixed)** — backend wrongly assumed rupees and did `total*100` for Razorpay (100× overcharge). Aligned backend to paise: `payments.service.ts` passes `order.total` directly; shipping `99900` (free >₹999) / `4900`; COD fee `4900`. Frontend `OrderSummary` now shows the COD fee so displayed total == charged total. Free-ship threshold standardized to ₹999 (backend was ₹599 — change back if business wants ₹599).
+5. **Cart sync (#4, local-first + sync on login)** — fixed broken `lib/api/cart.ts` paths (`/cart/items`, `/cart/items/:id`, `session_id`); `useCartStore` gained `hydrate()` + `mergeOnLogin()`; logged-in add/update/remove/clear mirror to backend; guest items replay into the server cart on login (only those with `id === variant_id`, so no double-count); `app/login/page.tsx` calls `mergeOnLogin()`. This also unblocked logged-in checkout — `createOrder` reads the SERVER cart (by user_id), which was always empty under the old local-only cart.
 
-## STRATEGIC DECISION (decide before Phase 3/9/11 work)
-Static export gives **no SSR/ISR**, so product pages are client-rendered → **Google sees blank HTML** (the audit's biggest SEO failure), and `next.config` redirects/headers/ISR from the plan don't apply. Choose one:
-- **(A) Stay static** on Cloudflare Pages, and prerender products via `generateStaticParams` at build (needs build-time product list + rebuild on catalog change). Simpler hosting, weaker freshness.
-- **(B) Move to a server runtime** (Vercel, or Cloudflare via `@cloudflare/next-on-pages`) to get real ISR/SSR + proper product SEO. More setup, correct long-term.
-This one decision drives Phases 3, 9, and 11.
+Files touched: BE — `001_initial_schema.sql`, `orders/dto/create-order.dto.ts`, `orders/orders.service.ts`, `orders/orders.module.ts`, `coupons/coupons.service.ts`, `payments/payments.service.ts`. FE — `lib/api/cart.ts`, `lib/store/useCartStore.ts`, `app/login/page.tsx`, `components/checkout/OrderSummary.tsx`, `app/checkout/page.tsx`.
 
-## ROADMAP (priority order)
-**P0 — core flow (blocks launch):** items 1–5 above.
-**P1 — usable store:** admin sub-pages (item 6); product filters (backend `ProductQueryDto` is missing `size`/`colour`; add related-products API); email real line-items + return/refund/newsletter templates.
-**P2 — launch quality & growth:** SEO (after the A/B decision — sitemap.ts, robots.ts, JSON-LD, OG images, canonicals); GA4 + events (add_to_cart, begin_checkout, purchase, view_item) + Merchant Center feed; performance (ISR, image optimization — currently `unoptimized:true`, backend caching); mobile polish (sticky add-to-cart, filter drawer, swipe gallery); stock-after-payment + OTP session cleanup + refresh-token rotation.
-**P3 — handover:** fill `.env.example` (currently empty), API docs (Swagger), seed data, deployment runbook, tests.
+## NEXT MOVE — START WITH #5
+**#5 Auth persist (recommended first — pairs with the cart work just shipped):**
+- Problem: `lib/store/useAuthStore.ts` has no `persist` and no bootstrap call to `/auth/me` on app load → user is logged out on every hard refresh, and the cart can't hydrate.
+- Do: on app load, attempt `authApi.me()` (rides the refresh httpOnly cookie via the client's auto-refresh on 401); if it succeeds call `setAuth(...)` then `useCartStore.getState().hydrate()`. Add a small bootstrap (top-level client provider / layout effect). Access token stays in memory.
+- VERIFY FIRST: confirm `auth.controller.ts` actually sets the refresh token as an httpOnly cookie on `verify-otp` and `refresh` — the whole restore depends on it.
 
-## How we work next session
-1. Paste this whole file as the first message.
-2. Tell me to connect both folders (`C:\KALOKEA\FRONTEND`, `C:\KALOKEA\BACKEND`).
-3. Pick ONE blocker to start (recommended order: #1 DB schema → #2 checkout → #3 coupons → #4 cart → #5 auth persist → #6 admin). Doing one fully > many half-done.
-4. The Linux shell was DOWN last session — I may not be able to run `npm`/`git`/build. I edit files; you run `npm install` / `npm run build` / `git push` and paste any errors back.
-5. After each fix: frontend `git push origin develop:main`; backend `git push` to main; watch Cloudflare/Railway logs.
+## REMAINING BLOCKERS / ROADMAP (priority order)
+- **#6 Admin panel** — only `/admin` dashboard exists; build 9 sub-pages (products, orders, inventory, coupons, banners, customers, reviews, returns, analytics); sidebar links 404. Backend admin endpoints partly exist. Admin coupon form MUST store `value`/`min_order_value` in paise (×100, like `ProductForm`).
+- **STRATEGIC DECISION (before SEO):** static export = client-rendered product pages = blank HTML to Google (biggest SEO gap in the audit). Choose (A) stay static on Cloudflare + `generateStaticParams` prerender (needs build-time product list + rebuild on catalog change) or (B) move to a server runtime (Vercel / `@cloudflare/next-on-pages`) for real SSR/ISR. Drives the SEO phases.
+- **Product filters** — `ProductQueryDto` has `size`/`colour` but `products.service` ignores them; add filtering + a related-products API.
+- **Operational env vars (Railway)** — `BREVO_API_KEY` (emails currently just log), `RAZORPAY_KEY_ID/SECRET/WEBHOOK_SECRET` (payments), `CLOUDINARY_API_KEY/SECRET` (uploads). Add test products.
+- **P2 launch quality** — SEO (sitemap.ts, robots.ts, JSON-LD, OG, canonicals, old WooCommerce URL redirects), GA4 events (add_to_cart, begin_checkout, purchase, view_item) + Merchant Center feed, performance (ISR, image opt — currently `unoptimized:true`), mobile polish, stock-after-payment, OTP cleanup, refresh-token rotation.
+- **P3 handover** — fill empty `.env.example`, Swagger API docs, seed data, deployment runbook, tests.
 
-## Reference docs in repo
-- `BACKEND/SECURITY_AUDIT.md` — security findings + what's fixed + recommendations.
-- `BACKEND/NEXT_SESSION_HANDOVER.md` — this file.
-- Your `KALOKEA_CTO_Audit_Report.html` — full phase-by-phase gap analysis (52%).
+## KNOWN GOTCHAS
+- `forbidNonWhitelisted: true` is on (main.ts) — any body field not in the DTO causes a 400. Add new fields to the DTO.
+- API responses are wrapped by TransformInterceptor as `{ data: ... }`; the FE client unwraps `json.data`.
+- Razorpay non-COD methods (upi/card/netbanking/wallet) are all normalized to `razorpay` server-side; DB constraint allows only `razorpay`/`cod`.
+- Reference docs in repo: `BACKEND/SECURITY_AUDIT.md`, this file, `KALOKEA_CTO_Audit_Report.html` (re-audit in progress).
+
+## SESSION START CHECKLIST
+1. Paste this whole file.
+2. Ask Claude to connect both folders: `C:\KALOKEA\FRONTEND` and `C:\KALOKEA\BACKEND`.
+3. Say "start #5" (or pick another item). One blocker fully done > many half-done.
+4. Claude edits files; you build/push and paste any errors.

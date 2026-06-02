@@ -131,12 +131,18 @@ export class OrdersService {
       orderItems.map(item => ({ ...item, order_id: order.id }))
     );
 
-    // Reduce stock
-    for (const item of cartItems as any[]) {
-      await this.db.client
-        .from('product_variants')
-        .update({ stock: item.product_variants.stock - item.quantity })
-        .eq('id', item.product_variants.id);
+    // Reduce stock.
+    // COD orders are committed immediately, so we deduct now.
+    // Razorpay (online) orders deduct stock ONLY on payment.captured (see
+    // PaymentsService.handleWebhook) — otherwise abandoned/failed online orders
+    // would permanently consume inventory with no real purchase.
+    if (paymentMethod === 'cod') {
+      for (const item of cartItems as any[]) {
+        await this.db.client
+          .from('product_variants')
+          .update({ stock: item.product_variants.stock - item.quantity })
+          .eq('id', item.product_variants.id);
+      }
     }
 
     // Clear cart

@@ -81,16 +81,35 @@ export class PaymentsService {
 
       const { data: order } = await this.db.client
         .from('orders')
-        .select('*, users(email, name)')
+        .select('*, users(email, name), order_items(variant_id, quantity)')
         .eq('razorpay_order_id', razorpayOrderId)
         .single();
 
-      if (order) {
+      // Idempotency: Razorpay can deliver the same webhook more than once.
+      // Only confirm + deduct stock on the FIRST transition to paid, so stock
+      // is never double-decremented on a duplicate delivery.
+      if (order && order.payment_status !== 'paid') {
         await this.db.client.from('orders').update({
           payment_status: 'paid',
           status: 'confirmed',
           razorpay_payment_id: payment.id,
         }).eq('id', order.id);
+
+        // Deduct stock now that payment is captured (online orders skip the
+        // decrement at order creation — see OrdersService.createOrder).
+        for (const item of (order.order_items as any[]) || []) {
+          const { data: variant } = await this.db.client
+            .from('product_variants')
+            .select('stock')
+            .eq('id', item.variant_id)
+            .single();
+          if (variant) {
+            await this.db.client
+              .from('product_variants')
+              .update({ stock: Math.max(0, variant.stock - item.quantity) })
+              .eq('id', item.variant_id);
+          }
+        }
 
         const userEmail = (order.users as any)?.email;
         if (userEmail) {

@@ -4,13 +4,19 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
 
 @Controller('orders')
 export class OrdersController {
   constructor(private orders: OrdersService) {}
 
+  // @Public() lets the global JwtAuthGuard skip (so guests can check out),
+  // while OptionalJwtAuthGuard parses the Bearer token IF present — so an
+  // authenticated buyer's order is tied to their user_id and shows up in
+  // GET /orders/my. Previously @Public alone left user undefined → null user_id.
   @Public()
+  @UseGuards(OptionalJwtAuthGuard)
   @Post()
   create(@Body() dto: CreateOrderDto, @CurrentUser() user: any) {
     return this.orders.createOrder(dto, user?.id);
