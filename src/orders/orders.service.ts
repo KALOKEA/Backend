@@ -1,8 +1,8 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
 import { CouponsService } from '../coupons/coupons.service';
+import { SettingsService } from '../settings/settings.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 
@@ -14,7 +14,7 @@ export class OrdersService {
     private db: DatabaseService,
     private email: EmailService,
     private coupons: CouponsService,
-    private config: ConfigService,
+    private settings: SettingsService,
   ) {}
 
   private generateOrderNumber(): string {
@@ -262,11 +262,14 @@ export class OrdersService {
     const money = (paise: number) => `₹${(Math.round(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-    const sellerName = this.config.get('SELLER_NAME') || 'KALOKEA';
-    const sellerAddress = this.config.get('SELLER_ADDRESS') || '';
-    const sellerGstin = this.config.get('SELLER_GSTIN') || '';
-    const sellerState = (this.config.get('SELLER_STATE') || '').toLowerCase();
-    const gstRate = Number(this.config.get('GST_RATE') ?? 5);
+    // Seller / GST details come from admin-editable settings (Settings page),
+    // not env — so they can be changed without a redeploy.
+    const settings = await this.settings.get();
+    const sellerName = settings.seller_name || 'KALOKEA';
+    const sellerAddress = settings.seller_address || '';
+    const sellerGstin = settings.seller_gstin || '';
+    const sellerState = (settings.seller_state || '').toLowerCase();
+    const gstRate = Number(settings.gst_rate) || 5;
 
     const addr = order.address_snapshot || {};
     const buyerState = String(addr.state || '').toLowerCase();
