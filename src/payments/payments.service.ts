@@ -1,8 +1,8 @@
 import { Injectable, BadRequestException, Logger, RawBodyRequest } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
-import { EmailService } from '../email/email.service';
 import { GstService } from '../gst/gst.service';
+import { OrdersService } from '../orders/orders.service';
 import * as crypto from 'crypto';
 import { Request } from 'express';
 
@@ -13,8 +13,8 @@ export class PaymentsService {
   constructor(
     private db: DatabaseService,
     private config: ConfigService,
-    private email: EmailService,
     private gst: GstService,
+    private orders: OrdersService,
   ) {}
 
   async createRazorpayOrder(orderId: string) {
@@ -117,27 +117,9 @@ export class PaymentsService {
           }
         }
 
-        const userEmail = (order.users as any)?.email;
-        if (userEmail) {
-          await this.email.sendOrderConfirmation(userEmail, {
-            customer_name: (order.users as any)?.name || 'Customer',
-            order_id: order.order_number,
-            total: order.total,
-            items: ((order.order_items as any[]) || []).map((it) => ({
-              name: it.snapshot_name,
-              quantity: it.quantity,
-              price: it.snapshot_price,
-            })),
-          });
-        }
-
-        await this.email.sendAdminNewOrder({
-          order_id: order.order_number,
-          customer_name: (order.users as any)?.name || order.guest_phone || 'Guest',
-          total: order.total,
-          items_count: 1,
-          payment_method: 'Razorpay',
-        });
+        // Booking confirmation + GST receipt + tax invoice to the customer,
+        // plus admin alert (single source of truth in OrdersService).
+        await this.orders.sendConfirmationEmails(order.id);
       }
     }
 

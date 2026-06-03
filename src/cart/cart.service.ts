@@ -70,7 +70,24 @@ export class CartService {
     return this.getCart(userId, dto.session_id);
   }
 
+  /**
+   * Verify a cart_item belongs to the caller's own cart before mutating it.
+   * The service-role key bypasses RLS, so without this an authenticated user
+   * could update/delete ANY user's cart item by guessing its id (IDOR). Returns
+   * the caller's cart id; throws 404 if the item isn't theirs.
+   */
+  private async assertItemOwnership(itemId: string, userId?: string, sessionId?: string): Promise<string> {
+    const cart = await this.getOrCreateCart(userId, sessionId);
+    const { data: item } = await this.db.client
+      .from('cart_items').select('id, cart_id').eq('id', itemId).single();
+    if (!item || item.cart_id !== cart.id) {
+      throw new NotFoundException('Cart item not found');
+    }
+    return cart.id;
+  }
+
   async updateItem(itemId: string, dto: UpdateCartItemDto, userId?: string, sessionId?: string) {
+    await this.assertItemOwnership(itemId, userId, sessionId);
     if (dto.quantity === 0) {
       await this.db.client.from('cart_items').delete().eq('id', itemId);
     } else {
@@ -80,6 +97,7 @@ export class CartService {
   }
 
   async removeItem(itemId: string, userId?: string, sessionId?: string) {
+    await this.assertItemOwnership(itemId, userId, sessionId);
     await this.db.client.from('cart_items').delete().eq('id', itemId);
     return this.getCart(userId, sessionId);
   }

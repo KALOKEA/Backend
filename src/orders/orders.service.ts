@@ -298,32 +298,70 @@ export class OrdersService {
       await this.coupons.redeem(appliedCoupon.id, order.id, userId);
     }
 
-    // COD is a committed sale → confirmation email + GST ledger now.
-    // Razorpay records the sale in the ledger on payment.captured (webhook).
+    // COD is a committed sale → confirmation + receipt + invoice email and GST
+    // ledger now. Razorpay does both on payment.captured (webhook).
     if (paymentMethod === 'cod') {
       await this.gst.postSaleLedger(order.id);
-
-      let recipientEmail = dto.guest_email;
-      if (!recipientEmail && userId) {
-        const { data: u } = await this.db.client
-          .from('users').select('email').eq('id', userId).single();
-        recipientEmail = u?.email || undefined;
-      }
-      if (recipientEmail) {
-        await this.email.sendOrderConfirmation(recipientEmail, {
-          customer_name: addressSnapshot.name,
-          order_id: order.order_number,
-          total: order.total,
-          items: b.orderItems.map((it) => ({
-            name: it.snapshot_name,
-            quantity: it.quantity,
-            price: it.snapshot_price,
-          })),
-        });
-      }
+      await this.sendConfirmationEmails(order.id);
     }
 
     return order;
+  }
+
+  /**
+   * Sends the customer their booking confirmation + GST payment receipt with the
+   * tax invoice attached, and alerts the admin. Called once a sale is committed
+   * (COD at creation, Razorpay on payment.captured). Email failures never block.
+   */
+  async sendConfirmationEmails(orderId: string): Promise<void> {
+    const { data: order } = await this.db.client
+      .from('orders')
+      .select('*, users(email, name), order_items(*)')
+      .eq('id', orderId)
+      .single();
+    if (!order) return;
+
+    const addr = order.address_snapshot || {};
+    let recipientEmail = order.guest_email || (order.users as any)?.email || undefined;
+
+    const items = (order.order_items || []).map((it: any) => ({
+      name: it.snapshot_name,
+      quantity: it.quantity,
+      price: Number(it.snapshot_price) || 0,
+    }));
+
+    if (recipientEmail) {
+      let invoiceHtml: string | undefined;
+      try { invoiceHtml = await this.renderInvoiceHtml(order); } catch { invoiceHtml = undefined; }
+
+      await this.email.sendOrderConfirmation(recipientEmail, {
+        customer_name: order.company_name || addr.name || 'Customer',
+        order_id: order.order_number,
+        total: Number(order.total) || 0,
+        items,
+        receipt: {
+          subtotal: Number(order.subtotal) || 0,
+          discount: Number(order.discount) || 0,
+          taxable_value: Number(order.taxable_value) || 0,
+          cgst: Number(order.cgst) || 0,
+          sgst: Number(order.sgst) || 0,
+          igst: Number(order.igst) || 0,
+          total_gst: Number(order.total_gst) || 0,
+          shipping: Number(order.shipping) || 0,
+          is_intra_state: !!order.is_intra_state,
+          payment_method: order.payment_method === 'cod' ? 'Cash on Delivery' : 'Razorpay (prepaid)',
+        },
+        invoice_html: invoiceHtml,
+      });
+    }
+
+    await this.email.sendAdminNewOrder({
+      order_id: order.order_number,
+      customer_name: (order.users as any)?.name || order.company_name || addr.name || order.guest_phone || 'Guest',
+      total: Number(order.total) || 0,
+      items_count: items.length,
+      payment_method: order.payment_method === 'cod' ? 'COD' : 'Razorpay',
+    });
   }
 
   async findAll(userId?: string, page = 1, limit = 10) {
@@ -396,7 +434,12 @@ export class OrdersService {
     if (!isAdmin && order.user_id !== user?.id) {
       throw new NotFoundException('Order not found');
     }
+    return this.renderInvoiceHtml(order);
+  }
 
+  /** Builds the tax-invoice HTML for an already-loaded order (no auth check).
+   *  Used by getInvoice (after ownership) and by the confirmation email. */
+  private async renderInvoiceHtml(order: any): Promise<string> {
     const money = (paise: number) =>
       `₹${(Math.round(paise) / 100).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const esc = (s: any) =>

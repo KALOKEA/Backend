@@ -58,24 +58,31 @@ export class EmailService {
 </html>`;
   }
 
-  private async send(to: string, subject: string, html: string): Promise<void> {
+  private async send(
+    to: string,
+    subject: string,
+    html: string,
+    attachments?: Array<{ name: string; content: string }>, // content = base64
+  ): Promise<void> {
     if (!this.apiKey) {
       this.logger.warn(`Email not sent (no BREVO_API_KEY). To: ${to} | Subject: ${subject}`);
       return;
     }
     try {
+      const payload: any = {
+        sender: { email: this.senderEmail, name: this.senderName },
+        to: [{ email: to }],
+        subject,
+        htmlContent: html,
+      };
+      if (attachments?.length) payload.attachment = attachments;
       const response = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'api-key': this.apiKey,
         },
-        body: JSON.stringify({
-          sender: { email: this.senderEmail, name: this.senderName },
-          to: [{ email: to }],
-          subject,
-          htmlContent: html,
-        }),
+        body: JSON.stringify(payload),
       });
       if (!response.ok) {
         const err = await response.text();
@@ -115,6 +122,21 @@ export class EmailService {
     order_id: string;
     total: number; // paise
     items: Array<{ name: string; quantity: number; price: number }>; // price = line unit price in paise
+    // Optional GST receipt breakdown (all paise). When present, a full payment
+    // receipt is shown and the tax invoice is attached.
+    receipt?: {
+      subtotal: number;
+      discount?: number;
+      taxable_value: number;
+      cgst: number;
+      sgst: number;
+      igst: number;
+      total_gst: number;
+      shipping: number;
+      is_intra_state: boolean;
+      payment_method?: string;
+    };
+    invoice_html?: string; // attached as the tax invoice
   }): Promise<void> {
     const rows = (vars.items || [])
       .map(
@@ -126,20 +148,38 @@ export class EmailService {
       )
       .join('');
 
+    // Payment receipt block (taxable value, GST split, shipping, paid total).
+    const r = vars.receipt;
+    const line = (label: string, value: string, strong = false) => `
+      <tr>
+        <td style="padding:5px 0;font-size:13px;color:${strong ? '#0a0a0a' : '#6b6b6b'};${strong ? 'font-weight:bold;' : ''}">${label}</td>
+        <td style="padding:5px 0;font-size:13px;text-align:right;color:${strong ? '#0a0a0a' : '#6b6b6b'};${strong ? 'font-weight:bold;' : ''}">${value}</td>
+      </tr>`;
+    const receiptBlock = r
+      ? `
+      <p style="margin:22px 0 8px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#9a9a9a;">Payment receipt</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#faf8f5;border:1px solid #e8e4e0;border-radius:8px;padding:8px 16px;margin:0 0 4px;">
+        ${line('Taxable value', this.money(r.taxable_value))}
+        ${r.discount ? line('Discount', `- ${this.money(r.discount)}`) : ''}
+        ${r.is_intra_state
+          ? line('CGST', this.money(r.cgst)) + line('SGST', this.money(r.sgst))
+          : line('IGST', this.money(r.igst))}
+        ${line('Shipping', r.shipping ? this.money(r.shipping) : 'Free')}
+        ${line('Total paid', this.money(vars.total), true)}
+      </table>
+      ${r.payment_method ? `<p style="margin:6px 0 0;font-size:12px;color:#9a9a9a;">Payment method: ${r.payment_method}</p>` : ''}
+      `
+      : '';
+
     const body = `
       <p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:#6b6b6b;">
-        Hi ${vars.customer_name}, thank you for your order. We&rsquo;ve received it and will let you know as soon as it ships.
+        Hi ${vars.customer_name}, thank you for your order. Your booking is confirmed &mdash; we&rsquo;ll let you know as soon as it ships.${vars.invoice_html ? ' Your GST tax invoice is attached to this email.' : ''}
       </p>
       <p style="margin:0 0 10px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#9a9a9a;">Order #${vars.order_id}</p>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px;">
         <tbody>${rows}</tbody>
-        <tfoot>
-          <tr>
-            <td style="padding:14px 0 0;font-size:15px;font-weight:bold;color:#0a0a0a;">Total</td>
-            <td style="padding:14px 0 0;font-size:15px;font-weight:bold;color:#0a0a0a;text-align:right;">${this.money(vars.total)}</td>
-          </tr>
-        </tfoot>
       </table>
+      ${receiptBlock}
     `;
     const html = this.layout({
       preheader: `Order #${vars.order_id} confirmed — ${this.money(vars.total)}`,
@@ -148,7 +188,12 @@ export class EmailService {
       body,
       footerNote: 'Questions about your order? Just reply to this email.',
     });
-    await this.send(to, `Order confirmed — #${vars.order_id}`, html);
+
+    const attachments = vars.invoice_html
+      ? [{ name: `Invoice-${vars.order_id}.html`, content: Buffer.from(vars.invoice_html, 'utf-8').toString('base64') }]
+      : undefined;
+
+    await this.send(to, `Order confirmed — #${vars.order_id}`, html, attachments);
   }
 
   async sendOrderShipped(to: string, vars: {

@@ -32,8 +32,10 @@ export class AuthService {
     if (dto.email) {
       await this.email.sendOtp(dto.email, otp);
     } else {
-      // SMS not yet implemented — log OTP for now
-      this.logger.log(`OTP for ${identifier}: ${otp}`);
+      // SMS not yet implemented. NEVER log the OTP value — that leaks a live
+      // credential into Railway logs (anyone with log access could sign in).
+      // Log only that delivery was attempted; wire up an SMS provider here.
+      this.logger.warn(`Phone OTP requested for ${identifier} but SMS delivery is not configured`);
     }
 
     return { message: 'OTP sent successfully' };
