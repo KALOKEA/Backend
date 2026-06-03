@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { CreateCouponDto } from './dto/create-coupon.dto';
 import { ValidateCouponDto } from './dto/validate-coupon.dto';
 
 @Injectable()
 export class CouponsService {
+  private readonly logger = new Logger(CouponsService.name);
   constructor(private db: DatabaseService) {}
 
   async validate(dto: ValidateCouponDto) {
@@ -40,17 +41,20 @@ export class CouponsService {
     };
   }
 
-  // Record a redemption once an order using this coupon is placed.
+  // Record a redemption once an order using this coupon is placed. Atomic:
+  // redeem_coupon bumps used_count only if still under max_uses and records the
+  // use in one statement, so two concurrent orders can't exceed the limit.
   async redeem(couponId: string, orderId: string, userId?: string) {
-    const { data: coupon } = await this.db.client
-      .from('coupons').select('used_count').eq('id', couponId).single();
-    await this.db.client
-      .from('coupons')
-      .update({ used_count: (coupon?.used_count || 0) + 1 })
-      .eq('id', couponId);
-    await this.db.client
-      .from('coupon_uses')
-      .insert({ coupon_id: couponId, order_id: orderId, user_id: userId || null });
+    const { data: ok, error } = await this.db.client.rpc('redeem_coupon', {
+      p_coupon_id: couponId,
+      p_order_id: orderId,
+      p_user_id: userId || null,
+    });
+    // The order is already placed; if the limit was hit in a race we can't undo
+    // the discount, but we log it so it can be reconciled. used_count stays correct.
+    if (error || ok !== true) {
+      this.logger.warn(`Coupon ${couponId} redemption not recorded for order ${orderId} (limit reached or error)`);
+    }
   }
 
   async findAll() {

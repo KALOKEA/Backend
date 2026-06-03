@@ -102,18 +102,16 @@ export class PaymentsService {
         await this.gst.postSaleLedger(order.id);
 
         // Deduct stock now that payment is captured (online orders skip the
-        // decrement at order creation — see OrdersService.createOrder).
+        // decrement at order creation — see OrdersService.createOrder). Atomic
+        // and guarded; if a rare race left it short, log it for manual review
+        // (the customer has already paid, so we don't drive stock negative).
         for (const item of (order.order_items as any[]) || []) {
-          const { data: variant } = await this.db.client
-            .from('product_variants')
-            .select('stock')
-            .eq('id', item.variant_id)
-            .single();
-          if (variant) {
-            await this.db.client
-              .from('product_variants')
-              .update({ stock: Math.max(0, variant.stock - item.quantity) })
-              .eq('id', item.variant_id);
+          const { data: ok } = await this.db.client.rpc('decrement_stock', {
+            p_variant_id: item.variant_id,
+            p_qty: item.quantity,
+          });
+          if (ok !== true) {
+            this.logger.warn(`Stock shortfall on paid order ${order.order_number} for variant ${item.variant_id} — manual review needed`);
           }
         }
 

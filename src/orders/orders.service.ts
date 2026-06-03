@@ -245,6 +245,31 @@ export class OrdersService {
 
     const wantsGstInvoice = !!dto.gst_invoice && !!dto.gstin;
 
+    // COD is a committed sale, so reserve stock ATOMICALLY before creating the
+    // order. decrement_stock only succeeds if enough is in stock, so concurrent
+    // checkouts can't oversell the last unit. If any line fails, restock what
+    // we already took and abort — nothing is persisted. (Razorpay reserves at
+    // payment.captured instead, so abandoned online orders don't hold stock.)
+    const reserved: Array<{ id: string; qty: number }> = [];
+    const rollbackStock = async () => {
+      for (const r of reserved) {
+        await this.db.client.rpc('restock_variant', { p_variant_id: r.id, p_qty: r.qty });
+      }
+    };
+    if (paymentMethod === 'cod') {
+      for (const item of b.orderItems) {
+        const { data: ok, error: decErr } = await this.db.client.rpc('decrement_stock', {
+          p_variant_id: item.variant_id,
+          p_qty: item.quantity,
+        });
+        if (decErr || ok !== true) {
+          await rollbackStock();
+          throw new BadRequestException(`Insufficient stock for ${item.snapshot_name}`);
+        }
+        reserved.push({ id: item.variant_id, qty: item.quantity });
+      }
+    }
+
     // Create order (GST snapshot persisted so invoices/ledger never recompute).
     const { data: order, error } = await this.db.client
       .from('orders')
@@ -276,20 +301,17 @@ export class OrdersService {
       .select()
       .single();
 
-    if (error) throw error;
+    // Order header failed — release any reserved stock so it isn't lost.
+    if (error) { await rollbackStock(); throw error; }
 
-    await this.db.client.from('order_items').insert(
+    const { error: itemsError } = await this.db.client.from('order_items').insert(
       b.orderItems.map((item) => ({ ...item, order_id: order.id })),
     );
-
-    // Stock: COD deducts now; Razorpay deducts on payment.captured (webhook).
-    if (paymentMethod === 'cod') {
-      for (const item of cartItems as any[]) {
-        await this.db.client
-          .from('product_variants')
-          .update({ stock: item.product_variants.stock - item.quantity })
-          .eq('id', item.product_variants.id);
-      }
+    // Items failed — remove the orphan order header and release stock.
+    if (itemsError) {
+      await this.db.client.from('orders').delete().eq('id', order.id);
+      await rollbackStock();
+      throw itemsError;
     }
 
     await this.db.client.from('cart_items').delete().eq('cart_id', cart.id);

@@ -69,14 +69,10 @@ export class ReturnsService {
     }
     for (const it of items) {
       if (!it.variant_id) continue;
-      const { data: v } = await this.db.client
-        .from('product_variants').select('stock').eq('id', it.variant_id).single();
-      if (v) {
-        await this.db.client
-          .from('product_variants')
-          .update({ stock: (v.stock || 0) + (it.quantity || 0) })
-          .eq('id', it.variant_id);
-      }
+      await this.db.client.rpc('restock_variant', {
+        p_variant_id: it.variant_id,
+        p_qty: it.quantity || 0,
+      });
     }
   }
 }

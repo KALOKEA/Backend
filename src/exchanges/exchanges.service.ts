@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { GstService } from '../gst/gst.service';
 import { CreateExchangeDto } from './dto/create-exchange.dto';
@@ -13,6 +13,7 @@ import { CreateExchangeDto } from './dto/create-exchange.dto';
  */
 @Injectable()
 export class ExchangesService {
+  private readonly logger = new Logger(ExchangesService.name);
   constructor(
     private db: DatabaseService,
     private gst: GstService,
@@ -148,24 +149,18 @@ export class ExchangesService {
     const qty = (ex.order_items as any)?.quantity || 1;
     const originalVariantId = (ex.order_items as any)?.variant_id;
 
+    // Atomic: put the original back, take the new one (guarded so it can't go
+    // negative). Logs if the new variant ran out between request and approval.
     if (originalVariantId) {
-      const { data: ov } = await this.db.client
-        .from('product_variants').select('stock').eq('id', originalVariantId).single();
-      if (ov) {
-        await this.db.client
-          .from('product_variants')
-          .update({ stock: (ov.stock || 0) + qty })
-          .eq('id', originalVariantId);
-      }
+      await this.db.client.rpc('restock_variant', { p_variant_id: originalVariantId, p_qty: qty });
     }
     if (ex.new_variant_id) {
-      const { data: nv } = await this.db.client
-        .from('product_variants').select('stock').eq('id', ex.new_variant_id).single();
-      if (nv) {
-        await this.db.client
-          .from('product_variants')
-          .update({ stock: Math.max(0, (nv.stock || 0) - qty) })
-          .eq('id', ex.new_variant_id);
+      const { data: ok } = await this.db.client.rpc('decrement_stock', {
+        p_variant_id: ex.new_variant_id,
+        p_qty: qty,
+      });
+      if (ok !== true) {
+        this.logger.warn(`Exchange ${ex.id}: new variant ${ex.new_variant_id} out of stock at completion`);
       }
     }
   }
