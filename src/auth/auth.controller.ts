@@ -7,6 +7,14 @@ import { Request, Response } from 'express';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
+/** Cookie settings shared by verify-otp and refresh. */
+const REFRESH_COOKIE = {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'none' as const,
+  maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+};
+
 @Controller('auth')
 export class AuthController {
   constructor(private auth: AuthService) {}
@@ -23,27 +31,30 @@ export class AuthController {
   @Post('verify-otp')
   async verifyOtp(@Body() dto: VerifyOtpDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.auth.verifyOtp(dto);
-    res.cookie('refresh_token', result.refresh_token, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie('refresh_token', result.refresh_token, REFRESH_COOKIE);
     return { access_token: result.access_token, user: result.user };
   }
 
+  /**
+   * Rotate the refresh token: validate the existing cookie, bump token_version,
+   * issue a brand-new refresh token cookie + new access token.
+   * The old cookie is dead after this call — replay = 401.
+   */
   @Public()
   @Post('refresh')
-  refresh(@Req() req: Request) {
+  async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const token = req.cookies?.refresh_token;
-    return this.auth.refresh(token);
+    const result = await this.auth.refresh(token);
+    // Set the rotated refresh token as the new httpOnly cookie.
+    res.cookie('refresh_token', result.refresh_token, REFRESH_COOKIE);
+    return { access_token: result.access_token };
   }
 
   @Public()
   @Post('logout')
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    // Revoke server-side (bumps token_version) so the refresh token can't be
-    // replayed, then clear the cookie.
+    // Revoke server-side (bumps token_version) so no refresh token for this
+    // user can ever be replayed, then clear the cookie.
     await this.auth.logout(req.cookies?.refresh_token);
     res.clearCookie('refresh_token');
     return { message: 'Logged out' };

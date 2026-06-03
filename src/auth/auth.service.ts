@@ -136,8 +136,19 @@ export class AuthService {
 
     if (!user) throw new UnauthorizedException('User not found');
     if ((user.token_version ?? 0) !== (payload.tv ?? 0)) {
+      // Token replay detected — the version no longer matches.
+      // Bump again to kill any remaining sessions (belt-and-suspenders).
+      await this.revokeAllSessions(payload.sub).catch(() => {});
       throw new UnauthorizedException('Session revoked');
     }
+
+    // ROTATION: bump token_version so the just-used refresh token is
+    // immediately invalidated. The new refresh token carries the new version.
+    const nextVersion = (user.token_version ?? 0) + 1;
+    await this.db.client
+      .from('users')
+      .update({ token_version: nextVersion })
+      .eq('id', payload.sub);
 
     // Use the fresh DB role so a role change (e.g. promotion to admin) takes
     // effect on the next refresh without forcing a full re-login.
@@ -145,7 +156,12 @@ export class AuthService {
       { sub: payload.sub, role: user.role },
       { expiresIn: '15m' },
     );
-    return { access_token };
+    const refresh_token = this.jwt.sign(
+      { sub: payload.sub, role: user.role, tv: nextVersion },
+      { secret: this.config.getOrThrow('JWT_REFRESH_SECRET'), expiresIn: '30d' },
+    );
+
+    return { access_token, refresh_token };
   }
 
   /**
