@@ -1,8 +1,10 @@
-import { Injectable, BadRequestException, Logger, RawBodyRequest } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Logger, RawBodyRequest } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { GstService } from '../gst/gst.service';
 import { OrdersService } from '../orders/orders.service';
+import { EmailService } from '../email/email.service';
+import { RefundDto } from './dto/refund.dto';
 import * as crypto from 'crypto';
 import { Request } from 'express';
 
@@ -15,7 +17,90 @@ export class PaymentsService {
     private config: ConfigService,
     private gst: GstService,
     private orders: OrdersService,
+    private email: EmailService,
   ) {}
+
+  /**
+   * Refund an order (admin). For prepaid (Razorpay) orders this calls the
+   * Razorpay refund API against the captured payment; for COD it records a
+   * manual refund (admin settles cash/UPI offline). Marks the order refunded
+   * and emails the customer. Amount defaults to the returned line's value
+   * (when return_id is given) or the full order total. Idempotent: a second
+   * call on an already-refunded order is a no-op.
+   *
+   * NOTE: the GST credit-note / restock is driven by the RETURN moving to
+   * 'refunded' (ReturnsService) — the admin UI does both, so do not duplicate
+   * the ledger reversal here.
+   */
+  async refund(dto: RefundDto) {
+    const { data: order } = await this.db.client
+      .from('orders')
+      .select('*, users(email, name)')
+      .eq('id', dto.order_id)
+      .single();
+    if (!order) throw new NotFoundException('Order not found');
+
+    if (order.payment_status === 'refunded') {
+      return { refunded: true, already: true, amount: 0 };
+    }
+    if (order.payment_status !== 'paid' && order.payment_method !== 'cod') {
+      throw new BadRequestException('Only paid orders can be refunded');
+    }
+
+    // Resolve the refund amount (paise).
+    let amount = dto.amount;
+    if (!amount && dto.return_id) {
+      const { data: ret } = await this.db.client
+        .from('returns').select('order_item_id').eq('id', dto.return_id).single();
+      if (ret?.order_item_id) {
+        const { data: oi } = await this.db.client
+          .from('order_items').select('taxable_value, gst_amount').eq('id', ret.order_item_id).single();
+        if (oi) amount = (Number(oi.taxable_value) || 0) + (Number(oi.gst_amount) || 0);
+      }
+    }
+    if (!amount || amount <= 0) amount = Number(order.total) || 0;
+    amount = Math.min(amount, Number(order.total) || 0);
+
+    let method = 'Manual (COD)';
+    // Prepaid → hit Razorpay's refund API.
+    if (order.payment_method !== 'cod' && order.razorpay_payment_id) {
+      const keyId = this.config.get('RAZORPAY_KEY_ID');
+      const keySecret = this.config.get('RAZORPAY_KEY_SECRET');
+      const res = await fetch(
+        `https://api.razorpay.com/v1/payments/${order.razorpay_payment_id}/refund`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
+          },
+          body: JSON.stringify({ amount: Math.round(amount) }),
+        },
+      );
+      const result: any = await res.json();
+      if (!res.ok) {
+        this.logger.error(`Razorpay refund failed: ${JSON.stringify(result)}`);
+        throw new BadRequestException(result.error?.description || 'Razorpay refund failed');
+      }
+      method = 'Razorpay';
+    }
+
+    await this.db.client.from('orders')
+      .update({ payment_status: 'refunded', status: 'refunded' })
+      .eq('id', order.id);
+
+    const to = order.guest_email || (order.users as any)?.email;
+    if (to) {
+      await this.email.sendRefundProcessed(to, {
+        customer_name: (order.users as any)?.name || (order.address_snapshot as any)?.name || 'Customer',
+        order_id: order.order_number,
+        refund_amount: amount,
+        method,
+      });
+    }
+
+    return { refunded: true, amount, method };
+  }
 
   async createRazorpayOrder(orderId: string) {
     const keyId = this.config.get('RAZORPAY_KEY_ID');

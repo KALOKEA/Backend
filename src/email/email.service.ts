@@ -247,6 +247,43 @@ export class EmailService {
     await this.send(adminEmail, `New Order — ${this.money(vars.total)}`, html);
   }
 
+  async sendRefundProcessed(to: string, vars: {
+    customer_name: string;
+    order_id: string;
+    refund_amount: number; // paise
+    method: string; // 'Razorpay' | 'Manual (COD)'
+    refund_days?: string;
+  }): Promise<void> {
+    const body = `
+      <p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Hi ${vars.customer_name}, your refund for order <strong style="color:#0a0a0a;">#${vars.order_id}</strong> has been processed.
+      </p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#faf8f5;border:1px solid #e8e4e0;border-radius:8px;">
+        <tr><td style="padding:16px 20px;font-size:13px;color:#6b6b6b;">
+          <span style="display:inline-block;width:120px;color:#9a9a9a;text-transform:uppercase;font-size:10px;letter-spacing:1px;">Refund amount</span>
+          <strong style="color:#0a0a0a;">${this.money(vars.refund_amount)}</strong>
+        </td></tr>
+        <tr><td style="padding:0 20px 16px;font-size:13px;color:#6b6b6b;">
+          <span style="display:inline-block;width:120px;color:#9a9a9a;text-transform:uppercase;font-size:10px;letter-spacing:1px;">Method</span>
+          <strong style="color:#0a0a0a;">${vars.method}</strong>
+        </td></tr>
+      </table>
+      <p style="margin:18px 0 0;font-size:13px;line-height:1.7;color:#6b6b6b;">
+        ${vars.method === 'Razorpay'
+          ? `It should reflect in your account within ${vars.refund_days || '5–7 business days'}.`
+          : 'Our team will reach out to arrange the refund.'}
+      </p>
+    `;
+    const html = this.layout({
+      preheader: `Refund of ${this.money(vars.refund_amount)} for order #${vars.order_id}`,
+      eyebrow: 'Refund Processed',
+      heading: 'Your refund is on its way',
+      body,
+      footerNote: 'Questions? Just reply to this email.',
+    });
+    await this.send(to, `Refund processed — #${vars.order_id}`, html);
+  }
+
   async sendNewsletterWelcome(to: string): Promise<void> {
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">

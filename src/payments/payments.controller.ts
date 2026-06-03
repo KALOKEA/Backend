@@ -1,7 +1,9 @@
-import { Controller, Post, Body, Req } from '@nestjs/common';
+import { Controller, Post, Body, Req, UseGuards } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentOrderDto } from './dto/create-payment-order.dto';
+import { RefundDto } from './dto/refund.dto';
 import { Public } from '../common/decorators/public.decorator';
+import { AdminGuard } from '../common/guards/admin.guard';
 import { Request } from 'express';
 
 @Controller('payments')
@@ -11,6 +13,12 @@ export class PaymentsController {
   @Post('create-order')
   createOrder(@Body() dto: CreatePaymentOrderDto) {
     return this.payments.createRazorpayOrder(dto.order_id);
+  }
+
+  @UseGuards(AdminGuard)
+  @Post('refund')
+  refund(@Body() dto: RefundDto) {
+    return this.payments.refund(dto);
   }
 
   @Public()
