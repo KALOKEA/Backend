@@ -9,6 +9,9 @@ export interface StoreSettings {
   seller_state: string;
   gst_rate: number;
   admin_email: string;
+  shipping_fee: number;           // paise
+  shipping_free_threshold: number; // paise
+  cod_fee: number;                 // paise
 }
 
 const DEFAULTS: StoreSettings = {
@@ -18,6 +21,9 @@ const DEFAULTS: StoreSettings = {
   seller_state: '',
   gst_rate: 5,
   admin_email: '',
+  shipping_fee: 4900,
+  shipping_free_threshold: 99900,
+  cod_fee: 4900,
 };
 
 @Injectable()
@@ -28,7 +34,14 @@ export class SettingsService {
   async get(): Promise<StoreSettings> {
     const { data } = await this.db.client
       .from('store_settings').select('*').eq('id', 1).maybeSingle();
-    return { ...DEFAULTS, ...(data || {}), gst_rate: Number(data?.gst_rate ?? DEFAULTS.gst_rate) };
+    return {
+      ...DEFAULTS,
+      ...(data || {}),
+      gst_rate: Number(data?.gst_rate ?? DEFAULTS.gst_rate),
+      shipping_fee: Number(data?.shipping_fee ?? DEFAULTS.shipping_fee),
+      shipping_free_threshold: Number(data?.shipping_free_threshold ?? DEFAULTS.shipping_free_threshold),
+      cod_fee: Number(data?.cod_fee ?? DEFAULTS.cod_fee),
+    };
   }
 
   async update(dto: UpdateSettingsDto): Promise<StoreSettings> {

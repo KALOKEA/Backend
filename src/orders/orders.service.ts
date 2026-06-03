@@ -7,6 +7,7 @@ import { GstService } from '../gst/gst.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 
+// Fallback constants — overridden at runtime by store_settings (after migration 007).
 const SHIPPING_FREE_THRESHOLD = 99900; // ₹999 (paise)
 const SHIPPING_FEE = 4900; // ₹49
 const COD_FEE = 4900; // ₹49
@@ -131,8 +132,14 @@ export class OrdersService {
     });
 
     const { cgst, sgst, igst } = this.gst.splitTax(gstTotal, intraState);
-    const shipping = subtotal >= SHIPPING_FREE_THRESHOLD ? 0 : SHIPPING_FEE;
-    const codFee = paymentMethod === 'cod' ? COD_FEE : 0;
+    // Read shipping/COD from admin settings (falls back to compile-time constants
+    // if the migration 007 hasn't been run yet).
+    const storeSettings = await this.settings.get().catch(() => null);
+    const freeThreshold = storeSettings?.shipping_free_threshold ?? SHIPPING_FREE_THRESHOLD;
+    const shippingFee   = storeSettings?.shipping_fee ?? SHIPPING_FEE;
+    const codFeeAmount  = storeSettings?.cod_fee ?? COD_FEE;
+    const shipping = subtotal >= freeThreshold ? 0 : shippingFee;
+    const codFee = paymentMethod === 'cod' ? codFeeAmount : 0;
     // Total = taxable goods value + GST + shipping + COD fee. (Shipping is not
     // taxed here — confirm treatment with your CA if you want GST on freight.)
     const total = taxableTotal + gstTotal + shipping + codFee;
