@@ -3,6 +3,7 @@ import { ReturnsService } from './returns.service';
 import { CreateReturnDto } from './dto/create-return.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { AdminAction } from '../common/decorators/admin-action.decorator';
 
 @Controller('returns')
 export class ReturnsController {
@@ -25,6 +26,7 @@ export class ReturnsController {
   }
 
   @UseGuards(AdminGuard)
+  @AdminAction('return.status_change')
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,

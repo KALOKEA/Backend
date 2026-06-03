@@ -58,4 +58,27 @@ export class AdminService {
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, limit);
   }
+
+  async getActivityLog(page = 1, limit = 50, action?: string, entityType?: string) {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let q = this.db.client
+      .from('admin_activity_log')
+      .select(
+        'id, action, entity_type, entity_id, details, created_at, users(name, email)',
+        { count: 'exact' },
+      )
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (action) q = q.eq('action', action);
+    if (entityType) q = q.eq('entity_type', entityType);
+
+    const { data, count } = await q;
+    return {
+      data: data || [],
+      meta: { total: count || 0, page, limit, total_pages: Math.ceil((count || 0) / limit) },
+    };
+  }
 }

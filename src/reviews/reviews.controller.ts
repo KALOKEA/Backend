@@ -4,6 +4,7 @@ import { CreateReviewDto } from './dto/create-review.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AdminAction } from '../common/decorators/admin-action.decorator';
 
 @Controller('reviews')
 export class ReviewsController {
@@ -27,12 +28,14 @@ export class ReviewsController {
   }
 
   @UseGuards(AdminGuard)
+  @AdminAction('review.approve')
   @Patch(':id/approve')
   approve(@Param('id') id: string) {
     return this.reviews.approve(id);
   }
 
   @UseGuards(AdminGuard)
+  @AdminAction('review.reject')
   @Delete(':id/reject')
   reject(@Param('id') id: string) {
     return this.reviews.reject(id);

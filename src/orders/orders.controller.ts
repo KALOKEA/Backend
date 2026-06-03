@@ -6,6 +6,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
+import { AdminAction } from '../common/decorators/admin-action.decorator';
 
 @Controller('orders')
 export class OrdersController {
@@ -57,6 +58,7 @@ export class OrdersController {
   }
 
   @UseGuards(AdminGuard)
+  @AdminAction('order.status_change')
   @Patch(':id/status')
   updateStatus(@Param('id') id: string, @Body() dto: UpdateOrderStatusDto) {
     return this.orders.updateStatus(id, dto);

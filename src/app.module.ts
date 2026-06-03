@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { AdminAuditInterceptor } from './common/interceptors/admin-audit.interceptor';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { HealthModule } from './health/health.module';
 import { DatabaseModule } from './database/database.module';
@@ -70,6 +71,12 @@ import { validate } from './config/env.validation';
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
+    },
+    // Audit interceptor: writes to admin_activity_log for any endpoint
+    // decorated with @AdminAction(). Fire-and-forget, never blocks response.
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AdminAuditInterceptor,
     },
   ],
 })

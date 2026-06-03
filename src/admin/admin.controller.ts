@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { AdminGuard } from '../common/guards/admin.guard';
 
@@ -20,5 +20,15 @@ export class AdminController {
   @Get('products/top')
   getTopProducts() {
     return this.admin.getTopProducts();
+  }
+
+  @Get('activity-log')
+  getActivityLog(
+    @Query('page') page = '1',
+    @Query('limit') limit = '50',
+    @Query('action') action?: string,
+    @Query('entity_type') entityType?: string,
+  ) {
+    return this.admin.getActivityLog(+page, +limit, action, entityType);
   }
 }

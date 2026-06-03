@@ -3,6 +3,7 @@ import { BannersService } from './banners.service';
 import { CreateBannerDto } from './dto/create-banner.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { AdminAction } from '../common/decorators/admin-action.decorator';
 
 @Controller('banners')
 export class BannersController {
@@ -21,18 +22,21 @@ export class BannersController {
   }
 
   @UseGuards(AdminGuard)
+  @AdminAction('banner.create')
   @Post()
   create(@Body() dto: CreateBannerDto) {
     return this.banners.create(dto);
   }
 
   @UseGuards(AdminGuard)
+  @AdminAction('banner.update')
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: Partial<CreateBannerDto>) {
     return this.banners.update(id, dto);
   }
 
   @UseGuards(AdminGuard)
+  @AdminAction('banner.delete')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.banners.remove(id);

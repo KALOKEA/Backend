@@ -6,6 +6,7 @@ import { AddImageDto } from './dto/add-image.dto';
 import { UpdateImageDto } from './dto/update-image.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { AdminAction } from '../common/decorators/admin-action.decorator';
 
 @Controller('products')
 export class ProductsController {
@@ -56,18 +57,21 @@ export class ProductsController {
   }
 
   @UseGuards(AdminGuard)
+  @AdminAction('product.create')
   @Post()
   create(@Body() dto: CreateProductDto) {
     return this.products.create(dto);
   }
 
   @UseGuards(AdminGuard)
+  @AdminAction('product.update')
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: Partial<CreateProductDto>) {
     return this.products.update(id, dto);
   }
 
   @UseGuards(AdminGuard)
+  @AdminAction('product.deactivate')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.products.remove(id);

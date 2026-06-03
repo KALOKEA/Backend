@@ -4,6 +4,7 @@ import { CreateCouponDto } from './dto/create-coupon.dto';
 import { ValidateCouponDto } from './dto/validate-coupon.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { AdminAction } from '../common/decorators/admin-action.decorator';
 
 @Controller('coupons')
 export class CouponsController {
@@ -22,12 +23,14 @@ export class CouponsController {
   }
 
   @UseGuards(AdminGuard)
+  @AdminAction('coupon.create')
   @Post()
   create(@Body() dto: CreateCouponDto) {
     return this.coupons.create(dto);
   }
 
   @UseGuards(AdminGuard)
+  @AdminAction('coupon.toggle')
   @Patch(':id/toggle')
   toggle(@Param('id') id: string) {
     return this.coupons.toggle(id);
