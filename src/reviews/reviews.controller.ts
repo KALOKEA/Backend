@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ReviewsService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { Public } from '../common/decorators/public.decorator';
@@ -19,6 +19,15 @@ export class ReviewsController {
   @Post()
   create(@Body() dto: CreateReviewDto, @CurrentUser() user: any) {
     return this.reviews.create(dto, user.id);
+  }
+
+  @UseGuards(AdminGuard)
+  @Get('admin/all')
+  findAll(
+    @Query('page') page = '1',
+    @Query('limit') limit = '30',
+  ) {
+    return this.reviews.findAll(+page, +limit);
   }
 
   @UseGuards(AdminGuard)

@@ -49,6 +49,21 @@ export class ReviewsService {
     return data || [];
   }
 
+  /** All reviews (approved + pending) for the admin panel. */
+  async findAll(page = 1, limit = 30) {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+    const { data, count } = await this.db.client
+      .from('reviews')
+      .select('*, users(name), products(name, slug)', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+    return {
+      data: data || [],
+      meta: { total: count || 0, page, limit, total_pages: Math.ceil((count || 0) / limit) },
+    };
+  }
+
   async approve(id: string) {
     // Fetch full review (with user email + product slug) before approving
     const { data: review } = await this.db.client

@@ -38,25 +38,63 @@ export class AdminService {
   }
 
   async getTopProducts(limit = 10) {
+    // Aggregate in the DB (single query, no N+1) using Supabase RPC or raw
+    // select with SUM. Supabase JS client doesn't expose GROUP BY natively, so
+    // we fetch all order_items for paid orders only and aggregate in JS — but
+    // crucially we now filter to paid orders first to avoid counting cancelled
+    // order revenue, and apply the limit after aggregation.
     const { data } = await this.db.client
       .from('order_items')
-      .select('snapshot_name, snapshot_sku, quantity, snapshot_price')
-      .limit(200);
+      .select('snapshot_name, quantity, snapshot_price, orders!inner(payment_status)')
+      .eq('orders.payment_status', 'paid');
 
     if (!data) return [];
 
-    const productMap: Record<string, { name: string; revenue: number; units: number }> = {};
+    const map: Record<string, { name: string; revenue: number; units: number }> = {};
     for (const item of data) {
-      if (!productMap[item.snapshot_name]) {
-        productMap[item.snapshot_name] = { name: item.snapshot_name, revenue: 0, units: 0 };
+      if (!map[item.snapshot_name]) {
+        map[item.snapshot_name] = { name: item.snapshot_name, revenue: 0, units: 0 };
       }
-      productMap[item.snapshot_name].revenue += item.snapshot_price * item.quantity;
-      productMap[item.snapshot_name].units += item.quantity;
+      map[item.snapshot_name].revenue += item.snapshot_price * item.quantity;
+      map[item.snapshot_name].units += item.quantity;
     }
 
-    return Object.values(productMap)
+    return Object.values(map)
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, limit);
+  }
+
+  /** Monthly revenue + order count for the past N months (for the analytics chart). */
+  async getMonthlyStats(months = 6) {
+    const since = new Date();
+    since.setMonth(since.getMonth() - months + 1);
+    since.setDate(1);
+    since.setHours(0, 0, 0, 0);
+
+    const { data } = await this.db.client
+      .from('orders')
+      .select('total, created_at')
+      .eq('payment_status', 'paid')
+      .gte('created_at', since.toISOString());
+
+    // Bucket by YYYY-MM
+    const buckets: Record<string, { month: string; revenue: number; orders: number }> = {};
+    for (let i = 0; i < months; i++) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - (months - 1 - i));
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      buckets[key] = { month: key, revenue: 0, orders: 0 };
+    }
+
+    for (const row of data || []) {
+      const key = row.created_at.slice(0, 7);
+      if (buckets[key]) {
+        buckets[key].revenue += Number(row.total);
+        buckets[key].orders += 1;
+      }
+    }
+
+    return Object.values(buckets);
   }
 
   async getActivityLog(page = 1, limit = 50, action?: string, entityType?: string) {

@@ -79,4 +79,14 @@ export class CouponsService {
       .from('coupons').update({ is_active: !coupon.is_active }).eq('id', id).select().single();
     return data;
   }
+
+  async update(id: string, dto: Partial<CreateCouponDto>) {
+    const { data, error } = await this.db.client
+      .from('coupons')
+      .update({ ...dto, ...(dto.code ? { code: dto.code.toUpperCase() } : {}) })
+      .eq('id', id)
+      .select().single();
+    if (error || !data) throw new NotFoundException('Coupon not found');
+    return data;
+  }
 }

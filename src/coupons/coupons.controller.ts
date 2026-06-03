@@ -30,6 +30,13 @@ export class CouponsController {
   }
 
   @UseGuards(AdminGuard)
+  @AdminAction('coupon.update')
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: Partial<CreateCouponDto>) {
+    return this.coupons.update(id, dto);
+  }
+
+  @UseGuards(AdminGuard)
   @AdminAction('coupon.toggle')
   @Patch(':id/toggle')
   toggle(@Param('id') id: string) {

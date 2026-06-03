@@ -22,6 +22,11 @@ export class AdminController {
     return this.admin.getTopProducts();
   }
 
+  @Get('monthly-stats')
+  getMonthlyStats(@Query('months') months = '6') {
+    return this.admin.getMonthlyStats(+months);
+  }
+
   @Get('activity-log')
   getActivityLog(
     @Query('page') page = '1',
