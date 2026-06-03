@@ -9,20 +9,21 @@ export class UploadService {
 
   async uploadImage(file: Express.Multer.File, folder = 'products'): Promise<{ url: string; public_id: string }> {
     const cloudName = this.config.get('CLOUDINARY_CLOUD_NAME');
-    const apiKey = this.config.get('CLOUDINARY_API_KEY');
+    const apiKey    = this.config.get('CLOUDINARY_API_KEY');
     const apiSecret = this.config.get('CLOUDINARY_API_SECRET');
 
+    // Give admins a precise error so they know exactly which Railway env var to set.
     if (!cloudName || !apiKey || !apiSecret) {
-      throw new BadRequestException('Cloudinary not configured');
-    }
-
-    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
-    if (!allowed.includes(file.mimetype)) {
-      throw new BadRequestException('Only JPEG, PNG, WebP images allowed');
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      throw new BadRequestException('Max file size is 5MB');
+      const missing = [
+        !cloudName  && 'CLOUDINARY_CLOUD_NAME',
+        !apiKey     && 'CLOUDINARY_API_KEY',
+        !apiSecret  && 'CLOUDINARY_API_SECRET',
+      ].filter(Boolean).join(', ');
+      this.logger.error(`Image upload failed — missing Railway env vars: ${missing}`);
+      throw new BadRequestException(
+        `Image upload is not configured. Add these Railway env vars: ${missing}. ` +
+        'Get them from cloudinary.com → Settings → Access Keys.',
+      );
     }
 
     const formData = new FormData();
@@ -49,11 +50,12 @@ export class UploadService {
 
     if (!response.ok) {
       const err = await response.json() as any;
-      this.logger.error('Cloudinary error:', err);
-      throw new BadRequestException(err.error?.message || 'Upload failed');
+      this.logger.error('Cloudinary upload error:', JSON.stringify(err));
+      throw new BadRequestException(err.error?.message || 'Cloudinary upload failed');
     }
 
     const result = await response.json() as any;
+    this.logger.log(`Uploaded ${file.originalname} → ${result.secure_url}`);
     return {
       url: result.secure_url,
       public_id: result.public_id,

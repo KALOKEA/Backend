@@ -109,4 +109,48 @@ export class UsersService {
     };
     return [header, ...rows].map((r) => r.map(esc).join(',')).join('\r\n');
   }
+
+  // ── Admin user management ──────────────────────────────────────────────────
+
+  /** Admin: edit any user's profile or role. */
+  async adminUpdate(id: string, dto: { name?: string; email?: string; phone?: string; role?: string }) {
+    const { data, error } = await this.db.client
+      .from('users')
+      .update({ ...dto, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('id, name, email, phone, role, created_at')
+      .single();
+    if (error || !data) throw new NotFoundException('User not found');
+    return data;
+  }
+
+  /** Admin: create a new user record (e.g. add another admin account). */
+  async adminCreate(dto: { name?: string; email?: string; phone?: string; role?: string }) {
+    if (!dto.email && !dto.phone) {
+      throw new Error('Email or phone is required');
+    }
+    const { data, error } = await this.db.client
+      .from('users')
+      .insert({
+        name: dto.name || null,
+        email: dto.email || null,
+        phone: dto.phone || null,
+        role: dto.role || 'customer',
+      })
+      .select('id, name, email, phone, role, created_at')
+      .single();
+    if (error) throw new Error(error.message);
+    return data;
+  }
+
+  /** Admin: search users by name/email/phone. */
+  async search(q: string, limit = 20) {
+    const { data } = await this.db.client
+      .from('users')
+      .select('id, name, email, phone, role, created_at')
+      .or(`name.ilike.%${q}%,email.ilike.%${q}%,phone.ilike.%${q}%`)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    return data || [];
+  }
 }
