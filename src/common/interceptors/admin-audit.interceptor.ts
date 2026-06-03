@@ -41,22 +41,22 @@ export class AdminAuditInterceptor implements NestInterceptor {
           undefined;
 
         // Fire-and-forget — never let audit failures bubble up to the caller.
-        this.db.client
-          .from('admin_activity_log')
-          .insert({
-            admin_id: adminId ?? null,
-            action: meta.action,
-            entity_type: meta.entityType,
-            entity_id: entityId ? String(entityId) : null,
-            details: {
-              method: req.method,
-              path: req.path,
-              // Record meaningful body keys (not the values — avoid logging PII)
-              body_keys: Object.keys(req.body ?? {}),
-            },
-          })
-          .then()
-          .catch(() => {/* intentionally silent */});
+        Promise.resolve(
+          this.db.client
+            .from('admin_activity_log')
+            .insert({
+              admin_id: adminId ?? null,
+              action: meta.action,
+              entity_type: meta.entityType,
+              entity_id: entityId ? String(entityId) : null,
+              details: {
+                method: req.method,
+                path: req.path,
+                // Record meaningful body keys (not values — avoid logging PII)
+                body_keys: Object.keys(req.body ?? {}),
+              },
+            }),
+        ).catch(() => {/* intentionally silent */});
       }),
     );
   }
