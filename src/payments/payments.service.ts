@@ -208,9 +208,23 @@ export class PaymentsService {
 
     if (event === 'payment.failed') {
       const payment = payload.payload.payment.entity;
-      await this.db.client.from('orders')
+      const { data: failedOrder } = await this.db.client
+        .from('orders')
         .update({ payment_status: 'failed' })
-        .eq('razorpay_order_id', payment.order_id);
+        .eq('razorpay_order_id', payment.order_id)
+        .select('order_number, total, users(email, name)')
+        .single();
+
+      if (failedOrder) {
+        const userEmail = (failedOrder.users as any)?.email;
+        if (userEmail) {
+          await this.email.sendPaymentFailed(userEmail, {
+            customer_name: (failedOrder.users as any)?.name || 'Customer',
+            order_id: failedOrder.order_number,
+            amount: failedOrder.total,
+          }).catch(() => {});
+        }
+      }
     }
 
     return { received: true };

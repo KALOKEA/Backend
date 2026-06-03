@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { EmailService } from '../email/email.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 
 @Injectable()
 export class ReviewsService {
-  constructor(private db: DatabaseService) {}
+  constructor(
+    private db: DatabaseService,
+    private email: EmailService,
+  ) {}
 
   async findByProduct(productId: string) {
     const { data } = await this.db.client
@@ -46,9 +50,27 @@ export class ReviewsService {
   }
 
   async approve(id: string) {
+    // Fetch full review (with user email + product slug) before approving
+    const { data: review } = await this.db.client
+      .from('reviews')
+      .select('*, users(name, email), products(name, slug)')
+      .eq('id', id)
+      .single();
+
     const { data, error } = await this.db.client
       .from('reviews').update({ is_approved: true }).eq('id', id).select().single();
     if (error || !data) throw new NotFoundException('Review not found');
+
+    // Fire-and-forget confirmation email to the reviewer
+    const userEmail = (review?.users as any)?.email;
+    if (userEmail) {
+      this.email.sendReviewApproved(userEmail, {
+        customer_name: (review?.users as any)?.name || 'Customer',
+        product_name: (review?.products as any)?.name || 'your product',
+        product_slug: (review?.products as any)?.slug || '',
+      }).catch(() => {});
+    }
+
     return data;
   }
 

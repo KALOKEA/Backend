@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { GstService } from '../gst/gst.service';
+import { EmailService } from '../email/email.service';
 import { CreateReturnDto } from './dto/create-return.dto';
 
 @Injectable()
@@ -8,6 +9,7 @@ export class ReturnsService {
   constructor(
     private db: DatabaseService,
     private gst: GstService,
+    private email: EmailService,
   ) {}
 
   async create(dto: CreateReturnDto, userId: string) {
@@ -37,6 +39,13 @@ export class ReturnsService {
   }
 
   async updateStatus(id: string, status: string, adminNotes?: string) {
+    // Fetch full record (with user + order) before updating so we have email details
+    const { data: existing } = await this.db.client
+      .from('returns')
+      .select('*, orders(order_number), users(name, email)')
+      .eq('id', id)
+      .single();
+
     const { data, error } = await this.db.client
       .from('returns')
       .update({ status, admin_notes: adminNotes, updated_at: new Date().toISOString() })
@@ -46,10 +55,21 @@ export class ReturnsService {
 
     // On final settlement, restock the returned item(s) and post a negative
     // (credit-note) row to the GST ledger so the period's net tax is reduced.
-    // Both steps are idempotent.
     if (status === 'completed' || status === 'refunded') {
       await this.restock(data);
       await this.gst.postReturnLedger(data.id);
+    }
+
+    // Send approval email when admin moves status to 'approved'
+    if (status === 'approved' && existing) {
+      const userEmail = (existing.users as any)?.email;
+      if (userEmail) {
+        this.email.sendReturnApproved(userEmail, {
+          customer_name: (existing.users as any)?.name || 'Customer',
+          order_id: (existing.orders as any)?.order_number || existing.order_id,
+          instructions: adminNotes,
+        }).catch(() => {});
+      }
     }
 
     return data;

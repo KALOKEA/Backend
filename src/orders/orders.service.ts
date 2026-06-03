@@ -423,16 +423,26 @@ export class OrdersService {
 
     await this.db.client.from('orders').update({ status: dto.status }).eq('id', id);
 
+    const userEmail = (order.users as any)?.email;
+    const customerName = (order.users as any)?.name || 'Customer';
+
     if (dto.status === 'shipped' && dto.tracking_number) {
-      const userEmail = (order.users as any)?.email;
       if (userEmail) {
         await this.email.sendOrderShipped(userEmail, {
-          customer_name: (order.users as any)?.name || 'Customer',
+          customer_name: customerName,
           order_id: order.order_number,
           tracking_number: dto.tracking_number,
           courier_name: dto.courier_name || 'Courier',
-        });
+        }).catch(() => {});
       }
+    }
+
+    if (dto.status === 'delivered' && userEmail) {
+      await this.email.sendOrderDelivered(userEmail, {
+        customer_name: customerName,
+        order_id: order.order_number,
+        order_db_id: id,
+      }).catch(() => {});
     }
 
     return { message: 'Status updated' };

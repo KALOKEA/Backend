@@ -318,4 +318,157 @@ export class EmailService {
     `;
     await this.send(adminEmail, `Low Stock: ${vars.product_name}`, html);
   }
+
+  // ── Payment failed ─────────────────────────────────────────────────────────
+
+  async sendPaymentFailed(to: string, vars: {
+    customer_name: string;
+    order_id: string;
+    amount: number; // paise
+  }): Promise<void> {
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const body = `
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Hi ${vars.customer_name}, unfortunately your payment of
+        <strong style="color:#0a0a0a;">${this.money(vars.amount)}</strong>
+        for order <strong style="color:#0a0a0a;">#${vars.order_id}</strong> could not be processed.
+      </p>
+      <p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Your cart is saved. Click below to try again with a different payment method.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0">
+        <tr><td style="border-radius:6px;background:#0a0a0a;">
+          <a href="${siteUrl}/cart"
+             style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
+            Retry Payment
+          </a>
+        </td></tr>
+      </table>
+    `;
+    const html = this.layout({
+      preheader: `Payment failed for order #${vars.order_id} — please retry`,
+      eyebrow: 'Action Required',
+      heading: 'Your payment didn’t go through',
+      body,
+      footerNote: 'If this keeps happening, contact us at support@kalokea.in.',
+    });
+    await this.send(to, `Payment failed — Order #${vars.order_id}`, html);
+  }
+
+  // ── Order delivered (with review CTA) ──────────────────────────────────────
+
+  async sendOrderDelivered(to: string, vars: {
+    customer_name: string;
+    order_id: string;
+    order_db_id: string; // UUID for the review link
+  }): Promise<void> {
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const body = `
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Hi ${vars.customer_name}, your order <strong style="color:#0a0a0a;">#${vars.order_id}</strong>
+        has been delivered. We hope you love it!
+      </p>
+      <p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        A quick review helps other shoppers and means the world to us. It only takes a minute.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+        <tr><td style="border-radius:6px;background:#0a0a0a;">
+          <a href="${siteUrl}/account/orders"
+             style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
+            Write a Review
+          </a>
+        </td></tr>
+      </table>
+      <p style="margin:0;font-size:12px;line-height:1.6;color:#9a9a9a;">
+        If you have any issues with your order, you can request a return from the same page within 7 days.
+      </p>
+    `;
+    const html = this.layout({
+      preheader: `Your Kalokea order #${vars.order_id} is delivered — share your thoughts!`,
+      eyebrow: 'Delivered',
+      heading: 'Your order has arrived',
+      body,
+    });
+    await this.send(to, `Delivered — #${vars.order_id}`, html);
+  }
+
+  // ── Review approved ────────────────────────────────────────────────────────
+
+  async sendReviewApproved(to: string, vars: {
+    customer_name: string;
+    product_name: string;
+    product_slug: string;
+  }): Promise<void> {
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const body = `
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Hi ${vars.customer_name}, your review for
+        <strong style="color:#0a0a0a;">${vars.product_name}</strong>
+        has been approved and is now live on the product page.
+      </p>
+      <p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Thank you for sharing your experience — it genuinely helps other shoppers.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0">
+        <tr><td style="border-radius:6px;background:#0a0a0a;">
+          <a href="${siteUrl}/product/${vars.product_slug}"
+             style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
+            View Product
+          </a>
+        </td></tr>
+      </table>
+    `;
+    const html = this.layout({
+      preheader: `Your review of ${vars.product_name} is now live on Kalokea`,
+      eyebrow: 'Review Published',
+      heading: 'Your review is live!',
+      body,
+    });
+    await this.send(to, `Your review is live — ${vars.product_name}`, html);
+  }
+
+  // ── Return approved ────────────────────────────────────────────────────────
+
+  async sendReturnApproved(to: string, vars: {
+    customer_name: string;
+    order_id: string;
+    instructions?: string;
+  }): Promise<void> {
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const body = `
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Hi ${vars.customer_name}, your return request for order
+        <strong style="color:#0a0a0a;">#${vars.order_id}</strong> has been approved.
+      </p>
+      ${vars.instructions ? `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+             style="background:#faf8f5;border:1px solid #e8e4e0;border-radius:8px;margin-bottom:22px;">
+        <tr><td style="padding:16px 20px;">
+          <p style="margin:0 0 6px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#9a9a9a;">
+            Return instructions
+          </p>
+          <p style="margin:0;font-size:14px;line-height:1.7;color:#0a0a0a;">${vars.instructions}</p>
+        </td></tr>
+      </table>` : `
+      <p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Our team will be in touch shortly with pickup or drop-off instructions.
+      </p>`}
+      <table role="presentation" cellpadding="0" cellspacing="0">
+        <tr><td style="border-radius:6px;background:#0a0a0a;">
+          <a href="${siteUrl}/account/orders"
+             style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
+            View My Orders
+          </a>
+        </td></tr>
+      </table>
+    `;
+    const html = this.layout({
+      preheader: `Return approved for order #${vars.order_id}`,
+      eyebrow: 'Return Approved',
+      heading: 'Your return has been approved',
+      body,
+      footerNote: 'Once we receive the item, your refund will be processed within 5&ndash;7 business days.',
+    });
+    await this.send(to, `Return approved — #${vars.order_id}`, html);
+  }
 }
