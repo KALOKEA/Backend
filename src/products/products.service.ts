@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
+import { AddImageDto } from './dto/add-image.dto';
 
 @Injectable()
 export class ProductsService {
@@ -115,5 +116,70 @@ export class ProductsService {
       .eq('id', id);
     if (error) throw error;
     return { message: 'Product deactivated' };
+  }
+
+  // ── Product images ─────────────────────────────────────────────────────────
+
+  /** List a product's images (admin), ordered. */
+  async listImages(productId: string) {
+    const { data } = await this.db.client
+      .from('product_images')
+      .select('id, url, alt_text, is_primary, sort_order, public_id')
+      .eq('product_id', productId)
+      .order('is_primary', { ascending: false })
+      .order('sort_order', { ascending: true });
+    return data || [];
+  }
+
+  /** Attach an (already-uploaded, e.g. Cloudinary) image to a product. The
+   *  first image added becomes primary automatically. */
+  async addImage(productId: string, dto: AddImageDto) {
+    const { data: prod } = await this.db.client
+      .from('products').select('id').eq('id', productId).single();
+    if (!prod) throw new NotFoundException('Product not found');
+
+    const existing = await this.listImages(productId);
+    const makePrimary = dto.is_primary || existing.length === 0;
+
+    if (makePrimary) {
+      // Only one primary per product.
+      await this.db.client
+        .from('product_images').update({ is_primary: false }).eq('product_id', productId);
+    }
+
+    const { data, error } = await this.db.client
+      .from('product_images')
+      .insert({
+        product_id: productId,
+        url: dto.url,
+        public_id: dto.public_id || null,
+        alt_text: dto.alt_text || null,
+        is_primary: makePrimary,
+        sort_order: dto.sort_order ?? existing.length,
+      })
+      .select()
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  /** Make one image the primary, unsetting the others on the same product. */
+  async setPrimaryImage(imageId: string) {
+    const { data: img } = await this.db.client
+      .from('product_images').select('product_id').eq('id', imageId).single();
+    if (!img) throw new NotFoundException('Image not found');
+    await this.db.client
+      .from('product_images').update({ is_primary: false }).eq('product_id', img.product_id);
+    const { data, error } = await this.db.client
+      .from('product_images').update({ is_primary: true }).eq('id', imageId).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async deleteImage(imageId: string) {
+    const { error } = await this.db.client
+      .from('product_images').delete().eq('id', imageId);
+    if (error) throw error;
+    return { message: 'Image removed' };
   }
 }

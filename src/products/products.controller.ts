@@ -2,6 +2,7 @@ import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } f
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
+import { AddImageDto } from './dto/add-image.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
 
@@ -13,6 +14,32 @@ export class ProductsController {
   @Get()
   findAll(@Query() query: ProductQueryDto) {
     return this.products.findAll(query);
+  }
+
+  // --- Product images (admin). Declared before ':slug' so the literal
+  //     'images' segment is never swallowed by the slug route. ---
+  @UseGuards(AdminGuard)
+  @Get(':id/images')
+  listImages(@Param('id') id: string) {
+    return this.products.listImages(id);
+  }
+
+  @UseGuards(AdminGuard)
+  @Post(':id/images')
+  addImage(@Param('id') id: string, @Body() dto: AddImageDto) {
+    return this.products.addImage(id, dto);
+  }
+
+  @UseGuards(AdminGuard)
+  @Patch('images/:imageId/primary')
+  setPrimaryImage(@Param('imageId') imageId: string) {
+    return this.products.setPrimaryImage(imageId);
+  }
+
+  @UseGuards(AdminGuard)
+  @Delete('images/:imageId')
+  deleteImage(@Param('imageId') imageId: string) {
+    return this.products.deleteImage(imageId);
   }
 
   @Public()
