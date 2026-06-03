@@ -42,8 +42,9 @@ export class ProductsService {
         product_images(url, alt_text, is_primary, sort_order),
         ${variantSelect}
       `, { count: 'exact' })
-      .eq('is_active', true)
       .range(from, to);
+
+    if (!query.include_inactive) q = (q as any).eq('is_active', true);
 
     if (categoryId) q = q.eq('category_id', categoryId);
     if (query.featured === 'true') q = q.eq('is_featured', true);
@@ -181,5 +182,17 @@ export class ProductsService {
       .from('product_images').delete().eq('id', imageId);
     if (error) throw error;
     return { message: 'Image removed' };
+  }
+
+  /** Update image metadata — used for reordering (sort_order) and alt text. */
+  async updateImage(imageId: string, dto: { alt_text?: string; sort_order?: number }) {
+    const { data, error } = await this.db.client
+      .from('product_images')
+      .update(dto)
+      .eq('id', imageId)
+      .select()
+      .single();
+    if (error || !data) throw new NotFoundException('Image not found');
+    return data;
   }
 }

@@ -1,5 +1,5 @@
-import { IsOptional, IsString, IsNumber, IsUUID } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString, IsNumber, IsUUID, IsBoolean } from 'class-validator';
+import { Type, Transform } from 'class-transformer';
 
 export class ProductQueryDto {
   @IsOptional()
@@ -49,4 +49,10 @@ export class ProductQueryDto {
   @IsOptional()
   @IsString()
   featured?: string;
+
+  // Admin-only: include inactive/draft products in results.
+  @IsOptional()
+  @Transform(({ value }) => value === 'true' || value === true)
+  @IsBoolean()
+  include_inactive?: boolean;
 }

@@ -3,6 +3,7 @@ import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { AddImageDto } from './dto/add-image.dto';
+import { UpdateImageDto } from './dto/update-image.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
 
@@ -34,6 +35,12 @@ export class ProductsController {
   @Patch('images/:imageId/primary')
   setPrimaryImage(@Param('imageId') imageId: string) {
     return this.products.setPrimaryImage(imageId);
+  }
+
+  @UseGuards(AdminGuard)
+  @Patch('images/:imageId')
+  updateImage(@Param('imageId') imageId: string, @Body() dto: UpdateImageDto) {
+    return this.products.updateImage(imageId, dto);
   }
 
   @UseGuards(AdminGuard)
