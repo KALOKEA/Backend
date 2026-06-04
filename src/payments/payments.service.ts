@@ -202,11 +202,12 @@ export class PaymentsService {
 
         // Confirm the soft-reservation so it's no longer counted as "pending"
         // by get_soft_reserved(). This is a no-op if migration 008 hasn't run.
-        await this.db.client
-          .from('stock_reservations')
-          .update({ confirmed: true })
-          .eq('order_id', order.id)
-          .catch(() => {});
+        Promise.resolve(
+          this.db.client
+            .from('stock_reservations')
+            .update({ confirmed: true })
+            .eq('order_id', order.id),
+        ).catch(() => {});
 
         // Booking confirmation + GST receipt + tax invoice to the customer,
         // plus admin alert (single source of truth in OrdersService).
@@ -225,11 +226,12 @@ export class PaymentsService {
 
       // Release soft-reservations so other buyers can purchase the items.
       if (failedOrder?.id) {
-        await this.db.client
-          .from('stock_reservations')
-          .delete()
-          .eq('order_id', failedOrder.id)
-          .catch(() => {});
+        Promise.resolve(
+          this.db.client
+            .from('stock_reservations')
+            .delete()
+            .eq('order_id', failedOrder.id),
+        ).catch(() => {});
       }
 
       if (failedOrder) {

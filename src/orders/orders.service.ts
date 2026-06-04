@@ -255,9 +255,9 @@ export class OrdersService {
     const softReservations = new Map<string, number>();
     if (paymentMethod === 'razorpay') {
       // Opportunistically clean up expired reservations (fire-and-forget).
-      this.db.client.rpc('expire_stock_reservations').catch(() => {});
+      Promise.resolve(this.db.client.rpc('expire_stock_reservations')).catch(() => {});
       for (const item of cartItems) {
-        const variantId = item.product_variants?.id;
+        const variantId = (item.product_variants as any)?.id;
         if (variantId) {
           const { data: count } = await this.db.client
             .rpc('get_soft_reserved', { p_variant_id: variantId });
@@ -364,17 +364,19 @@ export class OrdersService {
     // on payment.captured, deleted on payment.failed or TTL expiry.
     if (paymentMethod === 'razorpay') {
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-      await this.db.client.from('stock_reservations').insert(
-        b.orderItems.map((item) => ({
-          order_id: order.id,
-          variant_id: item.variant_id,
-          quantity: item.quantity,
-          expires_at: expiresAt,
-          confirmed: false,
-        })),
-      ).catch((e) => {
+      Promise.resolve(
+        this.db.client.from('stock_reservations').insert(
+          b.orderItems.map((item) => ({
+            order_id: order.id,
+            variant_id: item.variant_id,
+            quantity: item.quantity,
+            expires_at: expiresAt,
+            confirmed: false,
+          })),
+        ),
+      ).catch((e: any) => {
         // If migration 008 hasn't been run yet, log and continue — non-fatal.
-        this.logger.warn(`Stock reservation insert failed (run migration 008): ${e.message}`);
+        this.logger.warn(`Stock reservation insert failed (run migration 008): ${e?.message}`);
       });
     }
 
