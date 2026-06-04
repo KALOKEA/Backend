@@ -21,6 +21,15 @@ export class CategoriesService {
     return data;
   }
 
+  /** Admin: returns ALL categories including inactive. */
+  async findAllAdmin() {
+    const { data } = await this.db.client
+      .from('categories')
+      .select('*, categories!parent_id(name)')
+      .order('sort_order', { ascending: true });
+    return data || [];
+  }
+
   async findBySlug(slug: string) {
     const { data, error } = await this.db.client
       .from('categories')

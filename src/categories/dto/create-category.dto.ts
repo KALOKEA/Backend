@@ -8,6 +8,10 @@ export class CreateCategoryDto {
   slug: string;
 
   @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
   @IsUUID()
   parent_id?: string;
 

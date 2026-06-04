@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
@@ -6,7 +7,27 @@ import { AddImageDto } from './dto/add-image.dto';
 
 @Injectable()
 export class ProductsService {
-  constructor(private db: DatabaseService) {}
+  private readonly logger = new Logger(ProductsService.name);
+
+  constructor(
+    private db: DatabaseService,
+    private config: ConfigService,
+  ) {}
+
+  /**
+   * Fire the Cloudflare Pages deploy hook so static product pages rebuild
+   * automatically after catalog changes. Fire-and-forget — never blocks the
+   * API response. Set CLOUDFLARE_DEPLOY_HOOK in Railway env vars to activate.
+   * Get the URL from Cloudflare Pages → your project → Settings →
+   * Builds & deployments → Deploy Hooks → Add deploy hook.
+   */
+  private triggerDeploy(): void {
+    const hook = this.config.get<string>('CLOUDFLARE_DEPLOY_HOOK');
+    if (!hook) return;
+    fetch(hook, { method: 'POST' })
+      .then(() => this.logger.log('Cloudflare deploy hook fired'))
+      .catch((e) => this.logger.warn(`Deploy hook failed: ${e?.message}`));
+  }
 
   async findAll(query: ProductQueryDto) {
     const page = query.page || 1;
@@ -105,6 +126,7 @@ export class ProductsService {
       // instead of a generic 500 (Supabase errors are not HttpExceptions).
       throw new BadRequestException(error.message || 'Failed to create product');
     }
+    this.triggerDeploy();
     return data;
   }
 
@@ -117,6 +139,7 @@ export class ProductsService {
       .single();
     if (error) throw new BadRequestException(error.message || 'Failed to update product');
     if (!data) throw new NotFoundException('Product not found');
+    this.triggerDeploy();
     return data;
   }
 
@@ -127,6 +150,7 @@ export class ProductsService {
       .update({ is_active: false })
       .eq('id', id);
     if (error) throw error;
+    this.triggerDeploy();
     return { message: 'Product deactivated' };
   }
 
