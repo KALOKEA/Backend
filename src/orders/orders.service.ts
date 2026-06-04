@@ -64,8 +64,11 @@ export class OrdersService {
     paymentMethod: 'cod' | 'razorpay';
     buyerState?: string;
     checkStock?: boolean;
+    /** variant_id → soft-reserved qty. Passed for Razorpay orders so concurrent
+     *  checkouts can't double-sell the last unit before payment is captured. */
+    softReservations?: Map<string, number>;
   }) {
-    const { cartItems, discount, paymentMethod, buyerState, checkStock } = params;
+    const { cartItems, discount, paymentMethod, buyerState, checkStock, softReservations } = params;
     const settings = await this.settings.get();
     const defaultRate = Number(settings.gst_rate) || 0;
     const intraState = this.gst.isIntraState(buyerState, settings.seller_state);
@@ -75,10 +78,14 @@ export class OrdersService {
     const lines = cartItems.map((item: any) => {
       const variant = item.product_variants;
       const product = variant.products;
-      if (checkStock && (variant.stock == null || variant.stock < item.quantity)) {
-        throw new BadRequestException(
-          `Insufficient stock for ${product?.name || 'item'}${variant.size ? ` (${variant.size})` : ''}`,
-        );
+      if (checkStock) {
+        const softReserved = softReservations?.get(variant.id) ?? 0;
+        const available = (variant.stock ?? 0) - softReserved;
+        if (available < item.quantity) {
+          throw new BadRequestException(
+            `Insufficient stock for ${product?.name || 'item'}${variant.size ? ` (${variant.size})` : ''}`,
+          );
+        }
       }
       const lineSubtotal = variant.price * item.quantity;
       subtotal += lineSubtotal;
@@ -242,12 +249,30 @@ export class OrdersService {
       appliedCoupon = { id: result.coupon_id, code: result.code };
     }
 
+    // For Razorpay orders: load current soft-reservations so two concurrent
+    // checkouts for the last unit both see the first one's hold and one fails
+    // cleanly with "insufficient stock" instead of both succeeding.
+    const softReservations = new Map<string, number>();
+    if (paymentMethod === 'razorpay') {
+      // Opportunistically clean up expired reservations (fire-and-forget).
+      this.db.client.rpc('expire_stock_reservations').catch(() => {});
+      for (const item of cartItems) {
+        const variantId = item.product_variants?.id;
+        if (variantId) {
+          const { data: count } = await this.db.client
+            .rpc('get_soft_reserved', { p_variant_id: variantId });
+          softReservations.set(variantId, Number(count) || 0);
+        }
+      }
+    }
+
     const b = await this.computeBreakdown({
       cartItems,
       discount,
       paymentMethod,
       buyerState: addressSnapshot.state,
       checkStock: true,
+      softReservations,
     });
 
     const wantsGstInvoice = !!dto.gst_invoice && !!dto.gstin;
@@ -332,6 +357,25 @@ export class OrdersService {
     if (paymentMethod === 'cod') {
       await this.gst.postSaleLedger(order.id);
       await this.sendConfirmationEmails(order.id);
+    }
+
+    // Razorpay: create soft-reservations (TTL 15 min). These hold the units so
+    // a concurrent buyer can't grab them while payment is in-flight. Confirmed
+    // on payment.captured, deleted on payment.failed or TTL expiry.
+    if (paymentMethod === 'razorpay') {
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+      await this.db.client.from('stock_reservations').insert(
+        b.orderItems.map((item) => ({
+          order_id: order.id,
+          variant_id: item.variant_id,
+          quantity: item.quantity,
+          expires_at: expiresAt,
+          confirmed: false,
+        })),
+      ).catch((e) => {
+        // If migration 008 hasn't been run yet, log and continue — non-fatal.
+        this.logger.warn(`Stock reservation insert failed (run migration 008): ${e.message}`);
+      });
     }
 
     return order;
@@ -580,5 +624,104 @@ export class OrdersService {
     computer-generated invoice. To save as PDF, use your browser&rsquo;s Print &rarr; Save as PDF.
   </p>
 </body></html>`;
+  }
+
+  // ── Admin CSV export ───────────────────────────────────────────────────────
+
+  /**
+   * Export all orders (or a filtered subset) as CSV. Includes one row per
+   * order_item so every line has product details. Opens cleanly in Excel (UTF-8 BOM).
+   */
+  async exportOrdersCsv(filters: {
+    status?: string;
+    from?: string;
+    to?: string;
+  } = {}): Promise<string> {
+    let q = this.db.client
+      .from('orders')
+      .select(`
+        id, order_number, status, payment_status, payment_method,
+        total, taxable_value, total_gst, shipping_fee,
+        coupon_code, discount,
+        address_snapshot, company_name, gstin,
+        created_at,
+        users(name, email, phone),
+        order_items(
+          snapshot_name, quantity, snapshot_price,
+          hsn_code, gst_rate, taxable_value, gst_amount
+        )
+      `)
+      .order('created_at', { ascending: false });
+
+    if (filters.status) q = q.eq('status', filters.status);
+    if (filters.from)   q = q.gte('created_at', filters.from);
+    if (filters.to)     q = q.lte('created_at', filters.to);
+
+    const { data: orders } = await q;
+    if (!orders || !orders.length) return 'No orders found';
+
+    const rupees = (p: number) => p != null ? (Math.round(p) / 100).toFixed(2) : '';
+    const esc = (v: any) => {
+      const s = String(v ?? '');
+      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+
+    const header = [
+      'Order Number', 'Date', 'Status', 'Payment Status', 'Payment Method',
+      'Customer Name', 'Customer Email', 'Customer Phone',
+      'Shipping Name', 'Shipping Address', 'City', 'State', 'PIN',
+      'Company (GSTIN)', 'GSTIN',
+      'Product', 'HSN', 'GST Rate %', 'Qty', 'Unit Price ₹',
+      'Line Taxable ₹', 'Line GST ₹', 'Line Total ₹',
+      'Coupon', 'Discount ₹', 'Shipping ₹', 'Order Taxable ₹', 'Order GST ₹', 'Order Total ₹',
+    ];
+
+    const rows: string[][] = [];
+
+    for (const o of orders) {
+      const addr = o.address_snapshot || {};
+      const items: any[] = o.order_items || [{}];
+
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const unitPrice = it.snapshot_price ?? 0;
+        const lineTotal = unitPrice * (it.quantity ?? 1);
+
+        rows.push([
+          o.order_number,
+          new Date(o.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+          o.status,
+          o.payment_status,
+          o.payment_method,
+          (o.users as any)?.name || addr.first_name || '',
+          (o.users as any)?.email || '',
+          (o.users as any)?.phone || addr.phone || '',
+          addr.first_name ? `${addr.first_name} ${addr.last_name || ''}`.trim() : addr.name || '',
+          addr.address_line1 || addr.street || '',
+          addr.city || '',
+          addr.state || '',
+          addr.postal_code || addr.pincode || '',
+          o.company_name || '',
+          o.gstin || '',
+          it.snapshot_name || '',
+          it.hsn_code || '',
+          it.gst_rate != null ? String(it.gst_rate) : '',
+          it.quantity != null ? String(it.quantity) : '',
+          rupees(unitPrice),
+          rupees(it.taxable_value),
+          rupees(it.gst_amount),
+          rupees(lineTotal),
+          // Order-level fields — only on first item row to avoid duplication
+          i === 0 ? (o.coupon_code || '') : '',
+          i === 0 ? rupees(o.discount) : '',
+          i === 0 ? rupees(o.shipping_fee) : '',
+          i === 0 ? rupees(o.taxable_value) : '',
+          i === 0 ? rupees(o.total_gst) : '',
+          i === 0 ? rupees(o.total) : '',
+        ]);
+      }
+    }
+
+    return [header, ...rows].map(r => r.map(esc).join(',')).join('\r\n');
   }
 }

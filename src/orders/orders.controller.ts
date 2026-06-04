@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, Res, UseGuards } from '@nestjs/common';
+import { Response } from 'express';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
@@ -49,6 +50,22 @@ export class OrdersController {
   @Get(':id')
   findOne(@Param('id') id: string, @CurrentUser() user: any) {
     return this.orders.findOne(id, user);
+  }
+
+  /** Admin: export all orders as CSV (download). */
+  @UseGuards(AdminGuard)
+  @Get('export')
+  async exportCsv(
+    @Res() res: Response,
+    @Query('status') status?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    const csv = await this.orders.exportOrdersCsv({ status, from, to });
+    const filename = `kalokea-orders-${new Date().toISOString().slice(0, 10)}.csv`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send('﻿' + csv); // UTF-8 BOM so Excel opens correctly
   }
 
   @UseGuards(AdminGuard)
