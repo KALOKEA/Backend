@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
@@ -90,12 +90,21 @@ export class ProductsService {
   }
 
   async create(dto: CreateProductDto) {
+    // Guard: base_price must be a finite number (NaN/Infinity comes through as
+    // null after JSON serialisation and violates the NOT NULL DB constraint).
+    if (!Number.isFinite(dto.base_price)) {
+      throw new BadRequestException('base_price must be a valid number');
+    }
     const { data, error } = await this.db.client
       .from('products')
       .insert(dto)
       .select()
       .single();
-    if (error) throw error;
+    if (error) {
+      // Translate DB-level errors into 400s so the admin sees a clear message
+      // instead of a generic 500 (Supabase errors are not HttpExceptions).
+      throw new BadRequestException(error.message || 'Failed to create product');
+    }
     return data;
   }
 
@@ -106,7 +115,8 @@ export class ProductsService {
       .eq('id', id)
       .select()
       .single();
-    if (error || !data) throw new NotFoundException('Product not found');
+    if (error) throw new BadRequestException(error.message || 'Failed to update product');
+    if (!data) throw new NotFoundException('Product not found');
     return data;
   }
 
