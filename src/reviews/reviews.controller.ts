@@ -21,6 +21,11 @@ export class ReviewsController {
     return this.reviews.create(dto, user.id);
   }
 
+  @Get('my')
+  findMine(@CurrentUser() user: any) {
+    return this.reviews.findByUser(user.id);
+  }
+
   @UseGuards(AdminGuard)
   @Get('admin/all')
   findAll(

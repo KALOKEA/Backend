@@ -40,6 +40,16 @@ export class ReviewsService {
     return data;
   }
 
+  /** Customer: fetch their own submitted reviews (any approval status). */
+  async findByUser(userId: string) {
+    const { data } = await this.db.client
+      .from('reviews')
+      .select('*, products(name, slug)')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    return data || [];
+  }
+
   async findPending() {
     const { data } = await this.db.client
       .from('reviews')
