@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Query, Param, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Query, Param, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { UsersService } from './users.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
@@ -57,6 +57,14 @@ export class UsersController {
     @Body() body: { name?: string; email?: string; phone?: string; role?: string },
   ) {
     return this.users.adminCreate(body);
+  }
+
+  /** Admin: permanently delete a user (blocked if they have orders). */
+  @UseGuards(AdminGuard)
+  @AdminAction('user.delete')
+  @Delete(':id')
+  deleteUser(@Param('id') id: string) {
+    return this.users.deleteUser(id);
   }
 
   /** Admin: edit any user's profile or promote/demote role. */

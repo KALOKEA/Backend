@@ -2,6 +2,7 @@ import { Controller, Get, Put, Body, Query, UseGuards } from '@nestjs/common';
 import { SettingsService } from './settings.service';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { AdminAction } from '../common/decorators/admin-action.decorator';
 
 @UseGuards(AdminGuard)
 @Controller('settings')
@@ -13,6 +14,7 @@ export class SettingsController {
     return this.settings.get();
   }
 
+  @AdminAction('settings.update')
   @Put()
   update(@Body() dto: UpdateSettingsDto) {
     return this.settings.update(dto);

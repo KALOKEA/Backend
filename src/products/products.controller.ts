@@ -76,4 +76,11 @@ export class ProductsController {
   remove(@Param('id') id: string) {
     return this.products.remove(id);
   }
+
+  @UseGuards(AdminGuard)
+  @AdminAction('product.hard_delete')
+  @Delete(':id/permanent')
+  hardDelete(@Param('id') id: string) {
+    return this.products.hardDelete(id);
+  }
 }

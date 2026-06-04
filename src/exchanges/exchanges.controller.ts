@@ -3,6 +3,7 @@ import { ExchangesService } from './exchanges.service';
 import { CreateExchangeDto } from './dto/create-exchange.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { AdminAction } from '../common/decorators/admin-action.decorator';
 
 @Controller('exchanges')
 export class ExchangesController {
@@ -30,6 +31,7 @@ export class ExchangesController {
   }
 
   @UseGuards(AdminGuard)
+  @AdminAction('exchange.status_change')
   @Patch(':id/status')
   updateStatus(
     @Param('id') id: string,

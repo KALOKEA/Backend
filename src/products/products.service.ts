@@ -120,6 +120,7 @@ export class ProductsService {
     return data;
   }
 
+  /** Soft-delete (deactivate): hides from storefront, keeps all data. */
   async remove(id: string) {
     const { error } = await this.db.client
       .from('products')
@@ -127,6 +128,30 @@ export class ProductsService {
       .eq('id', id);
     if (error) throw error;
     return { message: 'Product deactivated' };
+  }
+
+  /**
+   * Hard-delete: permanently removes the product, all its variants, images,
+   * and related records from the database. Irreversible — use only for
+   * test/draft products that have never had orders.
+   */
+  async hardDelete(id: string) {
+    // Check no paid orders reference this product via order_items.
+    const { count } = await this.db.client
+      .from('order_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('product_id', id);
+    if (count && count > 0) {
+      throw new BadRequestException(
+        'Cannot permanently delete a product that has order history. Deactivate it instead.',
+      );
+    }
+    // Delete cascade: images → variants → product
+    await this.db.client.from('product_images').delete().eq('product_id', id);
+    await this.db.client.from('product_variants').delete().eq('product_id', id);
+    const { error } = await this.db.client.from('products').delete().eq('id', id);
+    if (error) throw new BadRequestException(error.message || 'Delete failed');
+    return { message: 'Product permanently deleted' };
   }
 
   // ── Product images ─────────────────────────────────────────────────────────

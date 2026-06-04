@@ -143,6 +143,25 @@ export class UsersService {
     return data;
   }
 
+  /**
+   * Admin: permanently delete a user. Blocked if the user has any orders
+   * (preserve financial records). Soft-block (role='banned') is safer for
+   * customers who have purchased.
+   */
+  async deleteUser(id: string) {
+    // Prevent deletion if the user has orders
+    const { count } = await this.db.client
+      .from('orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', id);
+    if (count && count > 0) {
+      throw new Error('Cannot delete a customer with order history. Change their role to "banned" instead.');
+    }
+    const { error } = await this.db.client.from('users').delete().eq('id', id);
+    if (error) throw new Error(error.message || 'Delete failed');
+    return { message: 'User deleted' };
+  }
+
   /** Admin: search users by name/email/phone. */
   async search(q: string, limit = 20) {
     const { data } = await this.db.client
