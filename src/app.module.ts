@@ -27,6 +27,7 @@ import { FeedModule } from './feed/feed.module';
 import { SettingsModule } from './settings/settings.module';
 import { GstModule } from './gst/gst.module';
 import { ExchangesModule } from './exchanges/exchanges.module';
+import { SmsModule } from './sms/sms.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { validate } from './config/env.validation';
 
@@ -61,6 +62,7 @@ import { validate } from './config/env.validation';
     SettingsModule,
     GstModule,
     ExchangesModule,
+    SmsModule,
   ],
   providers: [
     // ThrottlerGuard runs first so rate limits apply even to auth/public routes.

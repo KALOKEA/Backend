@@ -4,6 +4,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
+import { SmsService } from '../sms/sms.service';
 import { SendOtpDto } from './dto/send-otp.dto';
 import { VerifyOtpDto } from './dto/verify-otp.dto';
 
@@ -16,6 +17,7 @@ export class AuthService {
     private jwt: JwtService,
     private config: ConfigService,
     private email: EmailService,
+    private sms: SmsService,
   ) {}
 
   async sendOtp(dto: SendOtpDto) {
@@ -32,10 +34,10 @@ export class AuthService {
     if (dto.email) {
       await this.email.sendOtp(dto.email, otp);
     } else {
-      // SMS not yet implemented. NEVER log the OTP value — that leaks a live
-      // credential into Railway logs (anyone with log access could sign in).
-      // Log only that delivery was attempted; wire up an SMS provider here.
-      this.logger.warn(`Phone OTP requested for ${identifier} but SMS delivery is not configured`);
+      // SmsService is provider-agnostic — set SMS_PROVIDER + SMS_API_KEY in Railway.
+      // Supported: msg91 (recommended), 2factor, generic.
+      // If env vars are absent, SmsService logs a warning but never throws.
+      await this.sms.sendOtp(dto.phone!, otp);
     }
 
     return { message: 'OTP sent successfully' };

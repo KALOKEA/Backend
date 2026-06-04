@@ -4,7 +4,8 @@
   "scripts": {
     "start": "node dist/main.js",
     "start:dev": "ts-node src/main.ts",
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json",
+    "seed": "node scripts/seed.js"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
@@ -24,6 +25,7 @@
     "class-validator": "^0.14.0",
     "cookie-parser": "^1.4.6",
     "helmet": "^7.0.0",
+    "multer": "^2.1.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.1.13",
