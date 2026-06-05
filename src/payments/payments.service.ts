@@ -106,6 +106,11 @@ export class PaymentsService {
     const keyId = this.config.get('RAZORPAY_KEY_ID');
     const keySecret = this.config.get('RAZORPAY_KEY_SECRET');
 
+    if (!keyId || !keySecret) {
+      this.logger.error('RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET not set in environment');
+      throw new BadRequestException('Payment gateway is not configured. Please contact support.');
+    }
+
     const { data: order } = await this.db.client
       .from('orders').select('*').eq('id', orderId).single();
     if (!order) throw new BadRequestException('Order not found');
