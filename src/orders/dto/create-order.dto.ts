@@ -1,4 +1,14 @@
-import { IsString, IsOptional, IsObject, IsUUID, IsBoolean } from 'class-validator';
+import { IsString, IsOptional, IsObject, IsUUID, IsBoolean, IsArray, ValidateNested, IsNumber, IsPositive } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class ClientCartItemDto {
+  @IsUUID()
+  variant_id: string;
+
+  @IsNumber()
+  @IsPositive()
+  quantity: number;
+}
 
 export class CreateOrderDto {
   @IsOptional()
@@ -54,4 +64,13 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   gstin?: string;
+
+  // Fallback cart items from the frontend (used when server cart is missing,
+  // e.g. items added while offline or when the sync failed). Prices are always
+  // loaded server-side from the variant — the client only sends variant_id+qty.
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ClientCartItemDto)
+  client_items?: ClientCartItemDto[];
 }

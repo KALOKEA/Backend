@@ -36,9 +36,7 @@ export class OrdersService {
     else throw new BadRequestException('User or session required');
 
     const { data: cart } = await cartQuery.single();
-    if (!cart) throw new BadRequestException(
-      'Your cart could not be found on the server. Please add items to your cart again — this can happen if the item was out of stock when added.'
-    );
+    if (!cart) return { cart: null, cartItems: [] };
 
     const { data: cartItems } = await this.db.client
       .from('cart_items')
@@ -49,10 +47,29 @@ export class OrdersService {
       `)
       .eq('cart_id', cart.id);
 
-    if (!cartItems || cartItems.length === 0) throw new BadRequestException(
-      'Your cart is empty on the server. Please add items again — this can happen if an item went out of stock.'
-    );
-    return { cart, cartItems };
+    return { cart, cartItems: cartItems || [] };
+  }
+
+  /**
+   * Load cart items from client-provided variant_id+quantity pairs.
+   * Used as a fallback when the server cart is missing or empty.
+   * Prices are always fetched from the DB — the client only sends IDs.
+   */
+  private async loadClientItems(clientItems: { variant_id: string; quantity: number }[]) {
+    if (!clientItems?.length) return [];
+    const variantIds = clientItems.map(i => i.variant_id);
+    const { data: variants } = await this.db.client
+      .from('product_variants')
+      .select('id, sku, size, colour, price, stock, products(name, hsn_code, gst_rate, product_images(url, is_primary))')
+      .in('id', variantIds);
+
+    if (!variants?.length) throw new BadRequestException('None of the cart items could be found. Please re-add them.');
+
+    return clientItems.map(ci => {
+      const variant = variants.find(v => v.id === ci.variant_id);
+      if (!variant) return null;
+      return { quantity: ci.quantity, product_variants: variant };
+    }).filter(Boolean);
   }
 
   /**
@@ -222,7 +239,18 @@ export class OrdersService {
   }
 
   async createOrder(dto: CreateOrderDto, userId?: string) {
-    const { cart, cartItems } = await this.loadCart(userId, dto.session_id);
+    const { cart, cartItems: serverItems } = await this.loadCart(userId, dto.session_id);
+
+    // Use server cart if it has items; otherwise fall back to client-provided items.
+    let cartItems = serverItems;
+    if (!cartItems.length && dto.client_items?.length) {
+      cartItems = await this.loadClientItems(dto.client_items) as any[];
+    }
+    if (!cartItems.length) {
+      throw new BadRequestException(
+        'Your cart is empty. Please add items before placing an order.'
+      );
+    }
 
     // Resolve the delivery address into a snapshot. Logged-in users send
     // address_id (loaded + ownership-checked); guests send address_snapshot.
