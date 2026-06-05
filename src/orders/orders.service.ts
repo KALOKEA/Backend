@@ -36,7 +36,9 @@ export class OrdersService {
     else throw new BadRequestException('User or session required');
 
     const { data: cart } = await cartQuery.single();
-    if (!cart) throw new BadRequestException('Cart not found');
+    if (!cart) throw new BadRequestException(
+      'Your cart could not be found on the server. Please add items to your cart again — this can happen if the item was out of stock when added.'
+    );
 
     const { data: cartItems } = await this.db.client
       .from('cart_items')
@@ -47,7 +49,9 @@ export class OrdersService {
       `)
       .eq('cart_id', cart.id);
 
-    if (!cartItems || cartItems.length === 0) throw new BadRequestException('Cart is empty');
+    if (!cartItems || cartItems.length === 0) throw new BadRequestException(
+      'Your cart is empty on the server. Please add items again — this can happen if an item went out of stock.'
+    );
     return { cart, cartItems };
   }
 
