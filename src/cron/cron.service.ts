@@ -56,7 +56,6 @@ export class CronService {
   @Cron('0 8 * * *')
   async checkLowStock() {
     try {
-      const storeSettings = await this.settings.get();
       const threshold = DEFAULT_LOW_STOCK_THRESHOLD;
 
       const { data: variants } = await this.db.client
