@@ -2,9 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
-import { SettingsService } from '../settings/settings.service';
 
-/** Default threshold: alert when a variant drops below this many units. */
+/** Alert when a variant's stock drops to this level or below. */
 const DEFAULT_LOW_STOCK_THRESHOLD = 5;
 
 @Injectable()
@@ -14,7 +13,6 @@ export class CronService {
   constructor(
     private db: DatabaseService,
     private email: EmailService,
-    private settings: SettingsService,
   ) {}
 
   /**
@@ -70,16 +68,19 @@ export class CronService {
 
       if (!variants || variants.length === 0) return;
 
-      const items = variants.map((v: any) => ({
-        sku: v.sku,
-        name: (v.products as any)?.name || 'Unknown',
-        size: v.size,
-        colour: v.colour,
-        stock: v.stock,
-      }));
-
-      await this.email.sendLowStockAlert({ items, threshold });
-      this.logger.log(`Low stock alert sent for ${items.length} variant(s)`);
+      // Send one alert per low-stock variant (matches email.service.ts signature).
+      for (const v of variants) {
+        const productName = (v.products as any)?.name || 'Unknown';
+        const variantLabel = [v.size, v.colour].filter(Boolean).join(' / ') || v.sku;
+        await this.email.sendLowStockAlert({
+          product_name: productName,
+          variant: variantLabel,
+          current_stock: v.stock,
+        }).catch((err: any) => {
+          this.logger.error(`Low stock alert email failed for ${productName}: ${err?.message}`);
+        });
+      }
+      this.logger.log(`Low stock alert sent for ${variants.length} variant(s)`);
     } catch (err: any) {
       this.logger.error(`Low stock check failed: ${err?.message}`);
     }

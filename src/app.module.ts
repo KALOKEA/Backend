@@ -36,11 +36,8 @@ import { validate } from './config/env.validation';
 
 @Module({
   imports: [
-    // validate => fail-fast on missing required secrets (see config/env.validation.ts)
     ConfigModule.forRoot({ isGlobal: true, validate }),
     ScheduleModule.forRoot(),
-    // Global rate limiting: max 100 requests per minute per IP by default.
-    // Sensitive endpoints (e.g. OTP) tighten this further via @Throttle().
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
     DatabaseModule,
     EmailModule,
@@ -71,21 +68,9 @@ import { validate } from './config/env.validation';
     CronModule,
   ],
   providers: [
-    // ThrottlerGuard runs first so rate limits apply even to auth/public routes.
-    {
-      provide: APP_GUARD,
-      useClass: ThrottlerGuard,
-    },
-    {
-      provide: APP_GUARD,
-      useClass: JwtAuthGuard,
-    },
-    // Audit interceptor: writes to admin_activity_log for any endpoint
-    // decorated with @AdminAction(). Fire-and-forget, never blocks response.
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: AdminAuditInterceptor,
-    },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_INTERCEPTOR, useClass: AdminAuditInterceptor },
   ],
 })
 export class AppModule {}
