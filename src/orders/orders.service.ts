@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
 import { CouponsService } from '../coupons/coupons.service';
@@ -366,7 +366,7 @@ export class OrdersService {
       .single();
 
     // Order header failed — release any reserved stock so it isn't lost.
-    if (error) { await rollbackStock(); throw error; }
+    if (error) { await rollbackStock(); throw new InternalServerErrorException(error.message || 'Failed to create order'); }
 
     const { error: itemsError } = await this.db.client.from('order_items').insert(
       b.orderItems.map((item) => ({ ...item, order_id: order.id })),
@@ -375,10 +375,13 @@ export class OrdersService {
     if (itemsError) {
       await this.db.client.from('orders').delete().eq('id', order.id);
       await rollbackStock();
-      throw itemsError;
+      throw new InternalServerErrorException(itemsError.message || 'Failed to save order items');
     }
 
-    await this.db.client.from('cart_items').delete().eq('cart_id', cart.id);
+    // cart may be null when client_items fallback was used (no server cart existed).
+    if (cart?.id) {
+      await this.db.client.from('cart_items').delete().eq('cart_id', cart.id);
+    }
 
     if (appliedCoupon) {
       await this.coupons.redeem(appliedCoupon.id, order.id, userId);

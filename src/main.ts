@@ -16,6 +16,8 @@ async function bootstrap() {
   app.use(helmet());
   app.use(cookieParser());
 
+  // ALLOWED_ORIGINS (Railway env var) must include ALL frontend origins:
+  // https://kalokea.in, https://www.kalokea.in, https://kalokea.pages.dev
   const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',');
   app.enableCors({
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
