@@ -42,8 +42,8 @@ export class OrdersService {
       .from('cart_items')
       .select(`
         quantity,
-        product_variants(id, sku, size, colour, price, stock,
-          products(name, hsn_code, gst_rate, product_images(url, is_primary)))
+        product_variants(id, sku, size, colour, price, stock, is_active,
+          products(name, hsn_code, gst_rate, is_active, product_images(url, is_primary)))
       `)
       .eq('cart_id', cart.id);
 
@@ -60,7 +60,7 @@ export class OrdersService {
     const variantIds = clientItems.map(i => i.variant_id);
     const { data: variants } = await this.db.client
       .from('product_variants')
-      .select('id, sku, size, colour, price, stock, products(name, hsn_code, gst_rate, product_images(url, is_primary))')
+      .select('id, sku, size, colour, price, stock, is_active, products(name, hsn_code, gst_rate, is_active, product_images(url, is_primary))')
       .in('id', variantIds);
 
     if (!variants?.length) throw new BadRequestException('None of the cart items could be found. Please re-add them.');
@@ -99,6 +99,14 @@ export class OrdersService {
     const lines = cartItems.map((item: any) => {
       const variant = item.product_variants;
       const product = variant.products;
+
+      // Block orders for products/variants that have been deactivated (NH-2).
+      if (product?.is_active === false || variant?.is_active === false) {
+        throw new BadRequestException(
+          `"${product?.name || 'An item'}" is no longer available. Please remove it from your cart.`,
+        );
+      }
+
       if (checkStock) {
         const softReserved = softReservations?.get(variant.id) ?? 0;
         const available = (variant.stock ?? 0) - softReserved;

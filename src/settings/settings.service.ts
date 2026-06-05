@@ -52,15 +52,15 @@ export class SettingsService {
   }
 
   /**
-   * GST collected for a month (default = current). Indian retail prices are
-   * GST-inclusive, so tax is the portion inside the taxable value (subtotal less
-   * discount). Intra-state (buyer state == seller state) splits CGST+SGST;
-   * inter-state is IGST. Only counts paid orders. All amounts in paise.
+   * GST collected for a month — reads from gst_ledger (the authoritative,
+   * immutable accounting record) so the numbers EXACTLY match what was charged
+   * at checkout. The old approach re-computed from orders using the inclusive
+   * model (÷1.05) which gave a different number than the exclusive model used at
+   * checkout (×0.05). This fix ensures admin reports match GSTR-1 filings (NC-4).
    */
   async gstReport(month?: string) {
     const s = await this.get();
     const rate = Number(s.gst_rate) || 5;
-    const sellerState = (s.seller_state || '').trim().toLowerCase();
 
     const now = new Date();
     const m = month || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -68,32 +68,35 @@ export class SettingsService {
     const end = new Date(start);
     end.setUTCMonth(end.getUTCMonth() + 1);
 
+    // Read from the immutable ledger — only 'sale' rows (returns are negative entries).
     const { data } = await this.db.client
-      .from('orders')
-      .select('subtotal, discount, total, address_snapshot, payment_status, created_at')
-      .eq('payment_status', 'paid')
-      .gte('created_at', start.toISOString())
-      .lt('created_at', end.toISOString());
+      .from('gst_ledger')
+      .select('taxable_value, total_gst, cgst, sgst, igst, gross')
+      .eq('txn_type', 'sale')
+      .gte('txn_date', start.toISOString())
+      .lt('txn_date', end.toISOString());
 
-    let orders = 0, gross = 0, netValue = 0, totalGst = 0, cgst = 0, sgst = 0, igst = 0;
-    for (const o of data || []) {
-      orders++;
-      gross += o.total || 0;
-      const taxable = Math.max(0, (o.subtotal || 0) - (o.discount || 0));
-      const net = Math.round(taxable / (1 + rate / 100));
-      const tax = taxable - net;
-      netValue += net;
-      totalGst += tax;
-      const buyerState = String(o.address_snapshot?.state || '').trim().toLowerCase();
-      if (sellerState && sellerState === buyerState) {
-        const half = Math.round(tax / 2);
-        cgst += half;
-        sgst += tax - half;
-      } else {
-        igst += tax;
-      }
+    let rows = 0, grossSales = 0, netValue = 0, totalGst = 0, cgst = 0, sgst = 0, igst = 0;
+    for (const row of data || []) {
+      rows++;
+      grossSales += Number(row.gross) || 0;
+      netValue   += Number(row.taxable_value) || 0;
+      totalGst   += Number(row.total_gst) || 0;
+      cgst       += Number(row.cgst) || 0;
+      sgst       += Number(row.sgst) || 0;
+      igst       += Number(row.igst) || 0;
     }
 
-    return { period: m, gst_rate: rate, orders, gross_sales: gross, net_value: netValue, total_gst: totalGst, cgst, sgst, igst };
+    return {
+      period: m,
+      gst_rate: rate,
+      ledger_rows: rows,
+      gross_sales: grossSales,
+      net_value: netValue,
+      total_gst: totalGst,
+      cgst,
+      sgst,
+      igst,
+    };
   }
 }

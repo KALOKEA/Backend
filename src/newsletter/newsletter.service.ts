@@ -27,4 +27,18 @@ export class NewsletterService {
     // Always respond the same way — avoids leaking whether an email already exists.
     return { message: 'Subscribed' };
   }
+
+  /** Soft-delete: set is_active = false. Required by DPDP Act 2023 (MC-5). */
+  async unsubscribe(email: string) {
+    const normalized = email.trim().toLowerCase();
+    const { error } = await this.db.client
+      .from('newsletter_subscribers')
+      .update({ is_active: false })
+      .eq('email', normalized);
+    if (error) {
+      this.logger.error(`Newsletter unsubscribe failed: ${error.message}`);
+    }
+    // Always 200 — avoids leaking whether the email was subscribed.
+    return { message: 'Unsubscribed successfully' };
+  }
 }

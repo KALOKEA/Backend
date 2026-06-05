@@ -41,6 +41,7 @@ src/database/migrations/004_store_settings.sql   — store_settings singleton ta
 src/database/migrations/005_gst.sql              — GST columns, gst_ledger, exchanges
 src/database/migrations/006_atomic_ops.sql       — atomic SQL RPCs (decrement_stock etc.)
 src/database/migrations/007_shipping_settings.sql — shipping_fee, cod_fee in settings
+src/database/migrations/008_stock_reservations.sql — stock_reservations table + RPCs (NC-5 fix)
 ```
 
 ### 1.2 Grant service_role permissions

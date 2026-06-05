@@ -42,6 +42,17 @@ export function validate(config: Record<string, unknown>) {
     );
   }
 
+  // Enforce minimum entropy for JWT secrets (SEC-3).
+  for (const key of ['JWT_SECRET', 'JWT_REFRESH_SECRET'] as const) {
+    const v = String(config[key] || '');
+    if (v.length < 32) {
+      throw new Error(
+        `${key} must be at least 32 characters for adequate security. ` +
+          `Generate one with: openssl rand -hex 32`,
+      );
+    }
+  }
+
   const missingFeature = FEATURE.filter((key) => {
     const v = config[key];
     return v === undefined || v === null || String(v).trim() === '';

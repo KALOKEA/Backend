@@ -7,14 +7,22 @@ import { UpdateImageDto } from './dto/update-image.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 
 @Controller('products')
 export class ProductsController {
   constructor(private products: ProductsService) {}
 
+  // Public endpoint but uses OptionalJwtAuthGuard so we can check admin role.
+  // include_inactive is silently forced to false for non-admin requests (NC-2).
   @Public()
+  @UseGuards(OptionalJwtAuthGuard)
   @Get()
-  findAll(@Query() query: ProductQueryDto) {
+  findAll(@Query() query: ProductQueryDto, @CurrentUser() user: any) {
+    if (user?.role !== 'admin') {
+      query.include_inactive = false;
+    }
     return this.products.findAll(query);
   }
 

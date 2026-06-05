@@ -28,6 +28,14 @@ export class AuthService {
     const otp_hash = await bcrypt.hash(otp, 10);
     const expires_at = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 
+    // Delete all prior unused sessions for this identifier before inserting a new
+    // one. Prevents unbounded table growth and closes session-enumeration risk (SEC-4).
+    await this.db.client
+      .from('otp_sessions')
+      .delete()
+      .eq('identifier', identifier)
+      .eq('used', false);
+
     await this.db.client.from('otp_sessions').insert({ identifier, otp_hash, expires_at });
 
     // Send via email if email provided, otherwise log (SMS to be added later)

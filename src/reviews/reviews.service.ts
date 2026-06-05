@@ -21,15 +21,25 @@ export class ReviewsService {
   }
 
   async create(dto: CreateReviewDto, userId: string) {
-    // Verify user purchased this product
-    if (dto.order_id) {
-      const { data: orderItem } = await this.db.client
-        .from('order_items')
-        .select('id, product_variants(product_id)')
-        .eq('order_id', dto.order_id)
-        .eq('product_variants.product_id', dto.product_id)
-        .single();
-      if (!orderItem) throw new BadRequestException('You can only review products you purchased');
+    // Verify purchase unconditionally (NC-3): omitting order_id must not bypass this check.
+    // Query order_items for a paid order owned by this user containing this product.
+    const { data: purchaseCheck } = await this.db.client
+      .from('order_items')
+      .select('id, orders!inner(user_id, payment_status)')
+      .eq('product_variants.product_id', dto.product_id)  // via join
+      .limit(1);
+
+    // Fallback: direct join via orders table
+    const { data: verifyRows } = await this.db.client
+      .from('orders')
+      .select('id, order_items!inner(product_variants!inner(product_id))')
+      .eq('user_id', userId)
+      .eq('payment_status', 'paid')
+      .eq('order_items.product_variants.product_id', dto.product_id)
+      .limit(1);
+
+    if (!verifyRows || verifyRows.length === 0) {
+      throw new BadRequestException('You can only review products from your verified purchases');
     }
 
     const { data, error } = await this.db.client

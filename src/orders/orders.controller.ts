@@ -42,17 +42,7 @@ export class OrdersController {
     return this.orders.findAll(user.id, +page, +limit);
   }
 
-  @Get(':id/invoice')
-  getInvoice(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.orders.getInvoice(id, user);
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.orders.findOne(id, user);
-  }
-
-  /** Admin: export all orders as CSV (download). */
+  /** Admin: export all orders as CSV. Static route MUST be declared before :id. */
   @UseGuards(AdminGuard)
   @Get('export')
   async exportCsv(
@@ -66,6 +56,16 @@ export class OrdersController {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send('﻿' + csv); // UTF-8 BOM so Excel opens correctly
+  }
+
+  @Get(':id/invoice')
+  getInvoice(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.orders.getInvoice(id, user);
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.orders.findOne(id, user);
   }
 
   @UseGuards(AdminGuard)

@@ -1,4 +1,35 @@
-import { IsString, IsOptional, IsObject, IsUUID, IsBoolean, IsArray } from 'class-validator';
+import {
+  IsString, IsOptional, IsUUID, IsBoolean, IsArray,
+  IsIn, IsNotEmpty, Matches, Length, ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+
+/** Validates the nested delivery address fields properly (NH-3). */
+export class AddressSnapshotDto {
+  @IsString() @IsNotEmpty()
+  name: string;
+
+  @IsString() @IsNotEmpty()
+  @Matches(/^\d{10}$/, { message: 'phone must be a 10-digit number' })
+  phone: string;
+
+  @IsString() @IsNotEmpty()
+  line1: string;
+
+  @IsOptional() @IsString()
+  line2?: string;
+
+  @IsString() @IsNotEmpty()
+  city: string;
+
+  @IsString() @IsNotEmpty()
+  state: string;
+
+  @IsString() @IsNotEmpty()
+  @Matches(/^\d{6}$/, { message: 'pincode must be a 6-digit number' })
+  @Length(6, 6)
+  pincode: string;
+}
 
 export class CreateOrderDto {
   @IsOptional()
@@ -12,19 +43,16 @@ export class CreateOrderDto {
   address_id?: string;
 
   @IsOptional()
-  @IsObject()
-  address_snapshot?: {
-    name: string;
-    phone: string;
-    line1: string;
-    line2?: string;
-    city: string;
-    state: string;
-    pincode: string;
-  };
+  @ValidateNested()
+  @Type(() => AddressSnapshotDto)
+  address_snapshot?: AddressSnapshotDto;
 
+  // Accept all known frontend payment identifiers; service normalises to 'cod' | 'razorpay'.
   @IsString()
-  payment_method: string; // 'upi' | 'card' | 'netbanking' | 'wallet' | 'cod' — normalized server-side
+  @IsIn(['razorpay', 'cod', 'upi', 'card', 'netbanking', 'wallet'], {
+    message: "payment_method must be one of: razorpay, cod, upi, card, netbanking, wallet",
+  })
+  payment_method: string;
 
   @IsOptional()
   @IsString()

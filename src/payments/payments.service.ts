@@ -102,7 +102,7 @@ export class PaymentsService {
     return { refunded: true, amount, method };
   }
 
-  async createRazorpayOrder(orderId: string) {
+  async createRazorpayOrder(orderId: string, userId?: string) {
     const keyId = this.config.get('RAZORPAY_KEY_ID');
     const keySecret = this.config.get('RAZORPAY_KEY_SECRET');
 
@@ -114,6 +114,12 @@ export class PaymentsService {
     const { data: order } = await this.db.client
       .from('orders').select('*').eq('id', orderId).single();
     if (!order) throw new BadRequestException('Order not found');
+
+    // Ownership check (SEC-1): authenticated users may only pay for their own orders.
+    // Guests (userId undefined) are permitted — they can't be linked to a user_id.
+    if (userId && order.user_id && order.user_id !== userId) {
+      throw new BadRequestException('Order not found');
+    }
 
     const amount = Math.round(order.total); // order.total is already stored in paise (Razorpay's unit)
 

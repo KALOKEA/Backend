@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AdminAuditInterceptor } from './common/interceptors/admin-audit.interceptor';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { HealthModule } from './health/health.module';
@@ -28,6 +29,8 @@ import { SettingsModule } from './settings/settings.module';
 import { GstModule } from './gst/gst.module';
 import { ExchangesModule } from './exchanges/exchanges.module';
 import { SmsModule } from './sms/sms.module';
+import { ContactModule } from './contact/contact.module';
+import { CronModule } from './cron/cron.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { validate } from './config/env.validation';
 
@@ -35,6 +38,7 @@ import { validate } from './config/env.validation';
   imports: [
     // validate => fail-fast on missing required secrets (see config/env.validation.ts)
     ConfigModule.forRoot({ isGlobal: true, validate }),
+    ScheduleModule.forRoot(),
     // Global rate limiting: max 100 requests per minute per IP by default.
     // Sensitive endpoints (e.g. OTP) tighten this further via @Throttle().
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
@@ -63,6 +67,8 @@ import { validate } from './config/env.validation';
     GstModule,
     ExchangesModule,
     SmsModule,
+    ContactModule,
+    CronModule,
   ],
   providers: [
     // ThrottlerGuard runs first so rate limits apply even to auth/public routes.

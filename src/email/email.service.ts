@@ -471,4 +471,29 @@ export class EmailService {
     });
     await this.send(to, `Return approved — #${vars.order_id}`, html);
   }
+
+  /** Forward a contact-form submission to the store's admin email. */
+  async sendContactForm(vars: { name: string; email: string; message: string }): Promise<void> {
+    const adminEmail = this.config.get<string>('ADMIN_EMAIL');
+    if (!adminEmail) {
+      this.logger.warn('ADMIN_EMAIL not set — contact form message dropped');
+      return;
+    }
+    const body = `
+      <p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        New contact form submission from <strong style="color:#0a0a0a;">${vars.name}</strong>
+        (<a href="mailto:${vars.email}" style="color:#c8a4a5;">${vars.email}</a>).
+      </p>
+      <div style="background:#faf8f5;border:1px solid #e8e4e0;padding:18px 20px;margin:0 0 18px;font-size:14px;line-height:1.8;color:#0a0a0a;white-space:pre-wrap;">${vars.message}</div>
+      <p style="margin:0;font-size:12px;color:#9a9a9a;">Reply directly to this email to respond to the customer.</p>
+    `;
+    const html = this.layout({
+      preheader: `New message from ${vars.name}`,
+      eyebrow: 'Contact Form',
+      heading: `Message from ${vars.name}`,
+      body,
+    });
+    // Use replyTo so the admin can reply directly to the customer.
+    await this.send(adminEmail, `New contact message from ${vars.name}`, html);
+  }
 }
