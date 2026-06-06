@@ -1,4 +1,4 @@
-import { IsUUID, IsInt, IsString, IsOptional, Min, Max } from 'class-validator';
+import { IsUUID, IsInt, IsString, IsOptional, IsArray, IsUrl, Min, Max } from 'class-validator';
 
 export class CreateReviewDto {
   @IsUUID()
@@ -20,4 +20,10 @@ export class CreateReviewDto {
   @IsOptional()
   @IsString()
   body?: string;
+
+  /** Cloudinary URLs of attached photos / short videos (max 5). */
+  @IsOptional()
+  @IsArray()
+  @IsUrl({}, { each: true })
+  media_urls?: string[];
 }

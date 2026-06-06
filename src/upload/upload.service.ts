@@ -7,24 +7,35 @@ export class UploadService {
 
   constructor(private config: ConfigService) {}
 
-  async uploadImage(file: Express.Multer.File, folder = 'products'): Promise<{ url: string; public_id: string }> {
+  private getCredentials() {
     const cloudName = this.config.get('CLOUDINARY_CLOUD_NAME');
     const apiKey    = this.config.get('CLOUDINARY_API_KEY');
     const apiSecret = this.config.get('CLOUDINARY_API_SECRET');
-
-    // Give admins a precise error so they know exactly which Railway env var to set.
     if (!cloudName || !apiKey || !apiSecret) {
       const missing = [
         !cloudName  && 'CLOUDINARY_CLOUD_NAME',
         !apiKey     && 'CLOUDINARY_API_KEY',
         !apiSecret  && 'CLOUDINARY_API_SECRET',
       ].filter(Boolean).join(', ');
-      this.logger.error(`Image upload failed — missing Railway env vars: ${missing}`);
+      this.logger.error(`Upload failed — missing Railway env vars: ${missing}`);
       throw new BadRequestException(
-        `Image upload is not configured. Add these Railway env vars: ${missing}. ` +
+        `Upload is not configured. Add these Railway env vars: ${missing}. ` +
         'Get them from cloudinary.com → Settings → Access Keys.',
       );
     }
+    return { cloudName, apiKey, apiSecret };
+  }
+
+  async uploadImage(file: Express.Multer.File, folder = 'products'): Promise<{ url: string; public_id: string }> {
+    return this.uploadMedia(file, folder);
+  }
+
+  /** Upload any image or video file to Cloudinary. Routes to /image/upload or /video/upload. */
+  async uploadMedia(file: Express.Multer.File, folder = 'reviews'): Promise<{ url: string; public_id: string }> {
+    const { cloudName, apiKey, apiSecret } = this.getCredentials();
+
+    const isVideo = file.mimetype.startsWith('video/');
+    const resourceType = isVideo ? 'video' : 'image';
 
     const formData = new FormData();
     const timestamp = Math.floor(Date.now() / 1000);
@@ -44,7 +55,7 @@ export class UploadService {
     formData.append('signature', signature);
 
     const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+      `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`,
       { method: 'POST', body: formData },
     );
 
@@ -55,10 +66,7 @@ export class UploadService {
     }
 
     const result = await response.json() as any;
-    this.logger.log(`Uploaded ${file.originalname} → ${result.secure_url}`);
-    return {
-      url: result.secure_url,
-      public_id: result.public_id,
-    };
+    this.logger.log(`Uploaded ${file.originalname} (${resourceType}) → ${result.secure_url}`);
+    return { url: result.secure_url, public_id: result.public_id };
   }
 }

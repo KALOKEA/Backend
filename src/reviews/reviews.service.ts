@@ -21,15 +21,7 @@ export class ReviewsService {
   }
 
   async create(dto: CreateReviewDto, userId: string) {
-    // Verify purchase unconditionally (NC-3): omitting order_id must not bypass this check.
-    // Query order_items for a paid order owned by this user containing this product.
-    const { data: purchaseCheck } = await this.db.client
-      .from('order_items')
-      .select('id, orders!inner(user_id, payment_status)')
-      .eq('product_variants.product_id', dto.product_id)  // via join
-      .limit(1);
-
-    // Fallback: direct join via orders table
+    // Verify purchase (NC-3)
     const { data: verifyRows } = await this.db.client
       .from('orders')
       .select('id, order_items!inner(product_variants!inner(product_id))')
@@ -69,7 +61,6 @@ export class ReviewsService {
     return data || [];
   }
 
-  /** All reviews (approved + pending) for the admin panel. */
   async findAll(page = 1, limit = 30) {
     const from = (page - 1) * limit;
     const to = from + limit - 1;
@@ -84,8 +75,25 @@ export class ReviewsService {
     };
   }
 
+  /** Recompute avg_rating + review_count on the products row after any approval change. */
+  private async refreshProductStats(productId: string): Promise<void> {
+    const { data } = await this.db.client
+      .from('reviews')
+      .select('rating')
+      .eq('product_id', productId)
+      .eq('is_approved', true);
+    const rows = data ?? [];
+    const count = rows.length;
+    const avg = count > 0
+      ? Math.round((rows.reduce((s: number, r: any) => s + r.rating, 0) / count) * 10) / 10
+      : null;
+    await this.db.client
+      .from('products')
+      .update({ review_count: count, avg_rating: avg })
+      .eq('id', productId);
+  }
+
   async approve(id: string) {
-    // Fetch full review (with user email + product slug) before approving
     const { data: review } = await this.db.client
       .from('reviews')
       .select('*, users(name, email), products(name, slug)')
@@ -96,7 +104,10 @@ export class ReviewsService {
       .from('reviews').update({ is_approved: true }).eq('id', id).select().single();
     if (error || !data) throw new NotFoundException('Review not found');
 
-    // Fire-and-forget confirmation email to the reviewer
+    if (review?.product_id) {
+      this.refreshProductStats(review.product_id).catch(() => {});
+    }
+
     const userEmail = (review?.users as any)?.email;
     if (userEmail) {
       this.email.sendReviewApproved(userEmail, {
@@ -110,7 +121,12 @@ export class ReviewsService {
   }
 
   async reject(id: string) {
+    const { data: review } = await this.db.client
+      .from('reviews').select('product_id').eq('id', id).single();
     await this.db.client.from('reviews').delete().eq('id', id);
+    if (review?.product_id) {
+      this.refreshProductStats(review.product_id).catch(() => {});
+    }
     return { message: 'Review rejected and deleted' };
   }
 }
