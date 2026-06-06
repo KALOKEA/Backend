@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { DatabaseService } from '../database/database.service';
 
 @Injectable()
 export class EmailService {
@@ -8,10 +9,36 @@ export class EmailService {
   private readonly senderEmail: string;
   private readonly senderName: string;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private db: DatabaseService,
+  ) {
     this.apiKey = this.config.get('BREVO_API_KEY') || '';
     this.senderEmail = this.config.get('BREVO_SENDER_EMAIL') || 'noreply@kalokea.in';
     this.senderName = this.config.get('BREVO_SENDER_NAME') || 'Kalokea';
+  }
+
+  /** Append a row to email_log (fire-and-forget — never throws). */
+  private async logEmail(
+    recipient: string,
+    subject: string,
+    emailType: string,
+    status: 'sent' | 'failed' | 'retried_ok' | 'retried_fail',
+    errorMessage?: string,
+    retryCount = 0,
+  ): Promise<void> {
+    try {
+      await this.db.client.from('email_log').insert({
+        recipient,
+        subject,
+        email_type: emailType,
+        status,
+        error_message: errorMessage ?? null,
+        retry_count: retryCount,
+      });
+    } catch (e) {
+      this.logger.warn('Failed to write email_log entry:', e);
+    }
   }
 
   // All money is stored in paise; format to ₹ for display in emails.
@@ -58,38 +85,57 @@ export class EmailService {
 </html>`;
   }
 
+  private async sendToBrevo(
+    to: string,
+    subject: string,
+    html: string,
+    attachments?: Array<{ name: string; content: string }>,
+  ): Promise<void> {
+    const payload: any = {
+      sender: { email: this.senderEmail, name: this.senderName },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+    };
+    if (attachments?.length) payload.attachment = attachments;
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'api-key': this.apiKey },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Brevo API error: ${err}`);
+    }
+  }
+
   private async send(
     to: string,
     subject: string,
     html: string,
     attachments?: Array<{ name: string; content: string }>, // content = base64
+    emailType = 'unknown',
   ): Promise<void> {
     if (!this.apiKey) {
       this.logger.warn(`Email not sent (no BREVO_API_KEY). To: ${to} | Subject: ${subject}`);
+      await this.logEmail(to, subject, emailType, 'failed', 'BREVO_API_KEY not configured');
       return;
     }
     try {
-      const payload: any = {
-        sender: { email: this.senderEmail, name: this.senderName },
-        to: [{ email: to }],
-        subject,
-        htmlContent: html,
-      };
-      if (attachments?.length) payload.attachment = attachments;
-      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'api-key': this.apiKey,
-        },
-        body: JSON.stringify(payload),
-      });
-      if (!response.ok) {
-        const err = await response.text();
-        this.logger.error(`Brevo error: ${err}`);
+      await this.sendToBrevo(to, subject, html, attachments);
+      await this.logEmail(to, subject, emailType, 'sent');
+    } catch (err: any) {
+      this.logger.error(`Email send failed (attempt 1): ${err?.message}`);
+      // Retry once after 5 seconds
+      await new Promise(r => setTimeout(r, 5000));
+      try {
+        await this.sendToBrevo(to, subject, html, attachments);
+        this.logger.log(`Email send succeeded on retry. To: ${to} | Subject: ${subject}`);
+        await this.logEmail(to, subject, emailType, 'retried_ok', err?.message, 1);
+      } catch (retryErr: any) {
+        this.logger.error(`Email send failed (attempt 2, permanent): ${retryErr?.message}`);
+        await this.logEmail(to, subject, emailType, 'retried_fail', retryErr?.message, 1);
       }
-    } catch (err) {
-      this.logger.error('Email send failed:', err);
     }
   }
 
@@ -114,7 +160,7 @@ export class EmailService {
       body,
       footerNote: "If you didn't request this code, you can safely ignore this email.",
     });
-    await this.send(to, `${otp} is your Kalokea login code`, html);
+    await this.send(to, `${otp} is your Kalokea login code`, html, undefined, 'otp');
   }
 
   async sendOrderConfirmation(to: string, vars: {
@@ -240,7 +286,7 @@ export class EmailService {
       ? [{ name: `Invoice-${vars.order_id}.html`, content: Buffer.from(vars.invoice_html, 'utf-8').toString('base64') }]
       : undefined;
 
-    await this.send(to, `Order confirmed — #${vars.order_id}`, html, attachments);
+    await this.send(to, `Order confirmed — #${vars.order_id}`, html, attachments, 'order_confirmation');
   }
 
   async sendOrderShipped(to: string, vars: {
@@ -271,7 +317,7 @@ export class EmailService {
       body,
       footerNote: 'Delivery usually takes 3&ndash;5 business days.',
     });
-    await this.send(to, `Shipped — #${vars.order_id}`, html);
+    await this.send(to, `Shipped — #${vars.order_id}`, html, undefined, 'order_shipped');
   }
 
   async sendAdminNewOrder(vars: {
@@ -291,7 +337,7 @@ export class EmailService {
         <p><strong>Total: ${this.money(vars.total)}</strong></p>
       </div>
     `;
-    await this.send(adminEmail, `New Order — ${this.money(vars.total)}`, html);
+    await this.send(adminEmail, `New Order — ${this.money(vars.total)}`, html, undefined, 'admin_new_order');
   }
 
   async sendRefundProcessed(to: string, vars: {
@@ -328,7 +374,7 @@ export class EmailService {
       body,
       footerNote: 'Questions? Just reply to this email.',
     });
-    await this.send(to, `Refund processed — #${vars.order_id}`, html);
+    await this.send(to, `Refund processed — #${vars.order_id}`, html, undefined, 'refund');
   }
 
   async sendNewsletterWelcome(to: string): Promise<void> {
@@ -350,7 +396,7 @@ export class EmailService {
       body,
       footerNote: 'You can unsubscribe at any time.',
     });
-    await this.send(to, 'Welcome to Kalokea', html);
+    await this.send(to, 'Welcome to Kalokea', html, undefined, 'newsletter_welcome');
   }
 
   async sendLowStockAlert(vars: {
@@ -363,7 +409,7 @@ export class EmailService {
     const html = `
       <p>Low stock alert: <strong>${vars.product_name}</strong> (${vars.variant}) — only ${vars.current_stock} left.</p>
     `;
-    await this.send(adminEmail, `Low Stock: ${vars.product_name}`, html);
+    await this.send(adminEmail, `Low Stock: ${vars.product_name}`, html, undefined, 'low_stock_alert');
   }
 
   // ── Payment failed ─────────────────────────────────────────────────────────
@@ -399,7 +445,7 @@ export class EmailService {
       body,
       footerNote: 'If this keeps happening, contact us at support@kalokea.in.',
     });
-    await this.send(to, `Payment failed — Order #${vars.order_id}`, html);
+    await this.send(to, `Payment failed — Order #${vars.order_id}`, html, undefined, 'payment_failed');
   }
 
   // ── Order delivered (with review CTA) ──────────────────────────────────────
@@ -436,7 +482,7 @@ export class EmailService {
       heading: 'Your order has arrived',
       body,
     });
-    await this.send(to, `Delivered — #${vars.order_id}`, html);
+    await this.send(to, `Delivered — #${vars.order_id}`, html, undefined, 'order_delivered');
   }
 
   // ── Review approved ────────────────────────────────────────────────────────
@@ -471,7 +517,7 @@ export class EmailService {
       heading: 'Your review is live!',
       body,
     });
-    await this.send(to, `Your review is live — ${vars.product_name}`, html);
+    await this.send(to, `Your review is live — ${vars.product_name}`, html, undefined, 'review_approved');
   }
 
   // ── Return approved ────────────────────────────────────────────────────────
@@ -516,7 +562,7 @@ export class EmailService {
       body,
       footerNote: 'Once we receive the item, your refund will be processed within 5&ndash;7 business days.',
     });
-    await this.send(to, `Return approved — #${vars.order_id}`, html);
+    await this.send(to, `Return approved — #${vars.order_id}`, html, undefined, 'return_approved');
   }
 
   // ── Order cancelled ────────────────────────────────────────────────────────
@@ -543,42 +589,56 @@ export class EmailService {
           </a>
         </td></tr>
       </table>
-      <p style="margin:0;font-size:12px;line-height:1.6;color:#9a9a9a;">
-        If you didn&rsquo;t request this cancellation, please contact us immediately at support@kalokea.in.
+        If you didn&rsquo;t request this cancellation, please contact us at support@kalokea.in.
       </p>
     `;
     const html = this.layout({
-      preheader: `Order #${vars.order_id} has been cancelled`,
-      eyebrow: 'Order Cancelled',
-      heading: 'Your order has been cancelled',
+      preheader: `Your order #${vars.order_id} has been cancelled`,
+      eyebrow: 'Order Update',
+      heading: 'Order cancelled',
       body,
-      footerNote: 'We hope to see you again soon.',
     });
-    await this.send(to, `Order cancelled — #${vars.order_id}`, html);
+    await this.send(to, `Order cancelled — #${vars.order_id}`, html, undefined, 'order_cancelled');
   }
 
-  /** Forward a contact-form submission to the store's admin email. */
-  async sendContactForm(vars: { name: string; email: string; message: string }): Promise<void> {
+  // ── Admin: return filed alert ──────────────────────────────────────────────
+
+  async sendAdminReturnFiled(vars: {
+    customer_name: string;
+    customer_email: string;
+    order_id: string;
+    reason?: string;
+  }): Promise<void> {
     const adminEmail = this.config.get<string>('ADMIN_EMAIL');
-    if (!adminEmail) {
-      this.logger.warn('ADMIN_EMAIL not set — contact form message dropped');
-      return;
-    }
+    if (!adminEmail) return;
     const body = `
       <p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#6b6b6b;">
-        New contact form submission from <strong style="color:#0a0a0a;">${vars.name}</strong>
-        (<a href="mailto:${vars.email}" style="color:#c8a4a5;">${vars.email}</a>).
+        A new return request has been filed.
       </p>
-      <div style="background:#faf8f5;border:1px solid #e8e4e0;padding:18px 20px;margin:0 0 18px;font-size:14px;line-height:1.8;color:#0a0a0a;white-space:pre-wrap;">${vars.message}</div>
-      <p style="margin:0;font-size:12px;color:#9a9a9a;">Reply directly to this email to respond to the customer.</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 22px;border:1px solid #e8e4e0;border-radius:6px;overflow:hidden;">
+        <tr><td style="padding:12px 16px;background:#faf8f5;border-bottom:1px solid #e8e4e0;">
+          <span style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#6b6b6b;">Order</span>
+        </td><td style="padding:12px 16px;background:#faf8f5;border-bottom:1px solid #e8e4e0;text-align:right;">
+          <strong style="color:#0a0a0a;">#${vars.order_id}</strong>
+        </td></tr>
+        <tr><td style="padding:12px 16px;border-bottom:1px solid #e8e4e0;">
+          <span style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#6b6b6b;">Customer</span>
+        </td><td style="padding:12px 16px;border-bottom:1px solid #e8e4e0;text-align:right;">
+          ${vars.customer_name} &lt;${vars.customer_email}&gt;
+        </td></tr>
+        ${vars.reason ? `<tr><td style="padding:12px 16px;" colspan="2">
+          <span style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#6b6b6b;">Reason</span><br>
+          <span style="font-size:14px;color:#0a0a0a;margin-top:4px;display:block;">${vars.reason}</span>
+        </td></tr>` : ''}
+      </table>
+      <p style="margin:0;font-size:13px;color:#6b6b6b;">Log in to the admin panel to review and approve or reject this return.</p>
     `;
     const html = this.layout({
-      preheader: `New message from ${vars.name}`,
-      eyebrow: 'Contact Form',
-      heading: `Message from ${vars.name}`,
+      preheader: `Return filed for order #${vars.order_id}`,
+      eyebrow: 'Returns & Refunds',
+      heading: 'New return request',
       body,
     });
-    // Use replyTo so the admin can reply directly to the customer.
-    await this.send(adminEmail, `New contact message from ${vars.name}`, html);
+    await this.send(adminEmail, `Return filed — #${vars.order_id}`, html, undefined, 'admin_return_filed');
   }
 }

@@ -543,6 +543,13 @@ export class OrdersService {
       .update({ status: 'cancelled', fulfillment_status: 'cancelled' })
       .eq('id', id);
 
+    // Release any pending stock reservations immediately (don't wait for the 15-min cron).
+    // This restores availability to other buyers the moment the customer cancels.
+    await this.db.client
+      .from('stock_reservations')
+      .delete()
+      .eq('order_id', id);
+
     // Restore stock for each item
     const items: any[] = order.order_items || [];
     for (const item of items) {
@@ -675,6 +682,47 @@ export class OrdersService {
    * historical invoice never changes if the store rate later changes. Seller
    * details come from admin Settings. Ownership enforced (customer = own only).
    */
+  /**
+   * Public guest order tracking — returns minimal order status data.
+   * Requires order_number + the email used at checkout to prove ownership.
+   */
+  async trackGuestOrder(orderNumber: string, email: string): Promise<object> {
+    if (!orderNumber || !email) {
+      throw new NotFoundException('Order not found');
+    }
+    const { data: order } = await this.db.client
+      .from('orders')
+      .select('id, order_number, status, fulfillment_status, payment_status, payment_method, total, created_at, guest_email, order_items(quantity, unit_price, product_name, variant_label)')
+      .eq('order_number', orderNumber.toUpperCase())
+      .single();
+
+    if (!order) throw new NotFoundException('Order not found');
+
+    // Ownership: email must match guest_email stored at checkout
+    const emailMatch =
+      order.guest_email &&
+      order.guest_email.toLowerCase() === email.toLowerCase();
+
+    if (!emailMatch) throw new NotFoundException('Order not found');
+
+    // Return only safe public fields — never expose internal IDs or full address
+    return {
+      order_number: order.order_number,
+      status: order.status,
+      fulfillment_status: order.fulfillment_status,
+      payment_status: order.payment_status,
+      payment_method: order.payment_method,
+      total: order.total,
+      created_at: order.created_at,
+      items: (order.order_items || []).map((it: any) => ({
+        product_name: it.product_name,
+        variant_label: it.variant_label,
+        quantity: it.quantity,
+        unit_price: it.unit_price,
+      })),
+    };
+  }
+
   async getInvoice(id: string, user?: { id: string; role: string }, guestEmail?: string): Promise<string> {
     const { data: order } = await this.db.client
       .from('orders')

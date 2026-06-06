@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Req, Res } from '@nestjs/common';
+import { Controller, Get, Post, Body, Req, Res, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { SendOtpDto } from './dto/send-otp.dto';
@@ -6,6 +6,7 @@ import { VerifyOtpDto } from './dto/verify-otp.dto';
 import { Request, Response } from 'express';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CsrfGuard } from '../common/guards/csrf.guard';
 
 /** Cookie settings shared by verify-otp and refresh. */
 const REFRESH_COOKIE = {
@@ -41,6 +42,7 @@ export class AuthController {
    * The old cookie is dead after this call — replay = 401.
    */
   @Public()
+  @UseGuards(CsrfGuard)
   @Post('refresh')
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const token = req.cookies?.refresh_token;
@@ -51,6 +53,7 @@ export class AuthController {
   }
 
   @Public()
+  @UseGuards(CsrfGuard)
   @Post('logout')
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     // Revoke server-side (bumps token_version) so no refresh token for this

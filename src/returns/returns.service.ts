@@ -16,8 +16,22 @@ export class ReturnsService {
     const { data, error } = await this.db.client
       .from('returns')
       .insert({ ...dto, user_id: userId, status: 'requested' })
-      .select().single();
+      .select('*, orders(order_number), users(name, email)')
+      .single();
     if (error) throw error;
+
+    // Alert admin that a return has been filed
+    const userEmail = (data.users as any)?.email;
+    const orderNum = (data.orders as any)?.order_number || dto.order_id;
+    if (userEmail) {
+      this.email.sendAdminReturnFiled({
+        customer_name: (data.users as any)?.name || 'Customer',
+        customer_email: userEmail,
+        order_id: orderNum,
+        reason: dto.reason,
+      }).catch(() => {});
+    }
+
     return data;
   }
 

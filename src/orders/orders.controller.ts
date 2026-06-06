@@ -72,6 +72,21 @@ export class OrdersController {
    * via ?guest_email=<email> — the email must match order.guest_email. Both checks
    * are enforced inside getInvoice() after loading the order.
    */
+  /**
+   * Guest order status lookup — public endpoint.
+   * Returns minimal order info (status, items, total) for guest tracking page.
+   * Requires both order_number AND email to prove ownership.
+   */
+  @Public()
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Get('track')
+  trackOrder(
+    @Query('order_number') orderNumber: string,
+    @Query('email') email: string,
+  ) {
+    return this.orders.trackGuestOrder(orderNumber, email);
+  }
+
   @Public()
   @UseGuards(OptionalJwtAuthGuard)
   @Get(':id/invoice')
