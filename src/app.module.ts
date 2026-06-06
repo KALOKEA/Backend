@@ -73,4 +73,8 @@ import { validate } from './config/env.validation';
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
-    { provide: APP_GUARD, useClass: JwtAut
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_INTERCEPTOR, useClass: AdminAuditInterceptor },
+  ],
+})
+export class AppModule {}
