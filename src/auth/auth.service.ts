@@ -111,6 +111,7 @@ export class AuthService {
           phone: dto.phone || null,
           email: dto.email || null,
           accepted_terms: dto.accepted_terms === true,
+          ...(dto.name?.trim() ? { name: dto.name.trim() } : {}),
         })
         .select()
         .single();

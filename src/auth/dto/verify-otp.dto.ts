@@ -14,4 +14,9 @@ export class VerifyOtpDto {
   @IsOptional()
   @IsBoolean()
   accepted_terms?: boolean;
+
+  /** Display name — captured during signup, saved on new user creation. */
+  @IsOptional()
+  @IsString()
+  name?: string;
 }
