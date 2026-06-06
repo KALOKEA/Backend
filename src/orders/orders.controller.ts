@@ -78,41 +78,10 @@ export class OrdersController {
    * Requires both order_number AND email to prove ownership.
    */
   @Public()
-  @Throttle({ default: { limit: 10, ttl: 60000 } })
-  @Get('track')
-  trackOrder(
-    @Query('order_number') orderNumber: string,
-    @Query('email') email: string,
-  ) {
-    return this.orders.trackGuestOrder(orderNumber, email);
-  }
-
   @Public()
-  @UseGuards(OptionalJwtAuthGuard)
-  @Get(':id/invoice')
-  getInvoice(
-    @Param('id') id: string,
-    @CurrentUser() user: any,
-    @Query('guest_email') guestEmail?: string,
-  ) {
-    return this.orders.getInvoice(id, user, guestEmail);
-  }
-
-  @Get(':id')
-  findOne(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.orders.findOne(id, user);
-  }
-
-  @UseGuards(AdminGuard)
-  @Get()
-  findAll(@Query('page') page = '1', @Query('limit') limit = '20') {
-    return this.orders.findAll(undefined, +page, +limit);
-  }
-
-  @UseGuards(AdminGuard)
-  @AdminAction('order.status_change')
-  @Patch(':id/status')
-  updateStatus(@Param('id') id: string, @Body() dto: UpdateOrderStatusDto) {
-    return this.orders.updateStatus(id, dto);
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
+  @Post('guest/track')
+  trackGuestOrder(@Body() body: { order_number: string; email: string }) {
+    return this.ordersService.trackGuestOrder(body.order_number, body.email);
   }
 }

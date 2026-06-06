@@ -1,5 +1,6 @@
 import {
-  Controller, Post, Get, Body, Param, Headers, UseGuards, Logger, HttpCode
+  Controller, Post, Get, Delete, Patch, Body, Param, Headers,
+  UseGuards, Logger, HttpCode
 } from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
@@ -70,6 +71,83 @@ export class ShiprocketController {
   @Get('serviceability/:pincode')
   getServiceability(@Param('pincode') pincode: string) {
     return this.sr.getServiceability(pincode);
+  }
+
+  // ─── Admin: Generate manifest PDF ────────────────────────────────────────────
+  @UseGuards(AdminGuard)
+  @AdminAction('shiprocket.manifest')
+  @Post('manifest')
+  generateManifest(@Body() body: { shipment_ids: number[] }) {
+    return this.sr.generateManifest(body.shipment_ids);
+  }
+
+  // ─── Admin: Bulk sync tracking for all active shipments ───────────────────────
+  // ─── Admin: Bulk sync tracking for all active shipments ───────────────────────
+  @UseGuards(AdminGuard)
+  @Post('sync-tracking')
+  syncTracking() {
+    return this.sr.syncTrackingAll();
+  }
+
+  // ─── Admin: NDR list ─────────────────────────────────────────────────────────
+  @UseGuards(AdminGuard)
+  @Get('ndrs')
+  getNdrs() {
+    return this.sr.getNdrs();
+  }
+
+  // ─── Admin: NDR action ───────────────────────────────────────────────────────
+  @UseGuards(AdminGuard)
+  @AdminAction('shiprocket.ndr_action')
+  @Post('ndrs/:shipmentId/action')
+  ndrAction(
+    @Param('shipmentId') shipmentId: string,
+    @Body() body: { action: 'reAttempt' | 'return'; comment?: string },
+  ) {
+    return this.sr.ndrAction(shipmentId, body.action, body.comment);
+  }
+
+  // ─── Admin: Create return / reverse pickup ────────────────────────────────────
+  @UseGuards(AdminGuard)
+  @AdminAction('shiprocket.return_pickup')
+  @Post('orders/:id/return')
+  createReturnPickup(@Param('id') id: string) {
+    return this.sr.createReturnPickup(id);
+  }
+
+  // ─── Admin: COD remittance ────────────────────────────────────────────────────
+  @UseGuards(AdminGuard)
+  @Get('remittance')
+  getCodRemittance() {
+    return this.sr.getCodRemittance();
+  }
+
+  // ─── Admin: Packaging profiles ────────────────────────────────────────────────
+  @UseGuards(AdminGuard)
+  @Get('packaging-profiles')
+  getPackagingProfiles() {
+    return this.sr.getPackagingProfiles();
+  }
+
+  @UseGuards(AdminGuard)
+  @Post('packaging-profiles')
+  createPackagingProfile(@Body() body: {
+    name: string; weight: number; length: number;
+    breadth: number; height: number; is_default?: boolean;
+  }) {
+    return this.sr.createPackagingProfile(body);
+  }
+
+  @UseGuards(AdminGuard)
+  @Delete('packaging-profiles/:id')
+  deletePackagingProfile(@Param('id') id: string) {
+    return this.sr.deletePackagingProfile(id);
+  }
+
+  @UseGuards(AdminGuard)
+  @Patch('packaging-profiles/:id/default')
+  setDefaultProfile(@Param('id') id: string) {
+    return this.sr.setDefaultPackagingProfile(id);
   }
 
   // ─── Public: Webhook from ShipRocket (no auth — verified by token header) ─────

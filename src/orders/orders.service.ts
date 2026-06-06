@@ -635,8 +635,9 @@ export class OrdersService {
   }
 
   async updateStatus(id: string, dto: UpdateOrderStatusDto, adminEmail?: string) {
+    // Include guest_email so guest orders receive status emails too (LB1 fix)
     const { data: order } = await this.db.client
-      .from('orders').select('*, users(email, name)').eq('id', id).single();
+      .from('orders').select('*, guest_email, users(email, name)').eq('id', id).single();
     if (!order) throw new NotFoundException('Order not found');
 
     // Sync fulfillment_status for statuses that map 1:1.
@@ -651,8 +652,18 @@ export class OrdersService {
     }
     await this.db.client.from('orders').update(fulfillmentUpdate).eq('id', id);
 
-    const userEmail = (order.users as any)?.email;
+    // Resolve email for both logged-in users AND guests
+    const userEmail = order.guest_email || (order.users as any)?.email;
     const customerName = (order.users as any)?.name || 'Customer';
+
+    if (dto.status === 'processing') {
+      if (userEmail) {
+        await this.email.sendOrderProcessing(userEmail, {
+          customer_name: customerName,
+          order_id: order.order_number,
+        }).catch(() => {});
+      }
+    }
 
     if (dto.status === 'shipped' && dto.tracking_number) {
       if (userEmail) {
@@ -665,12 +676,14 @@ export class OrdersService {
       }
     }
 
-    if (dto.status === 'delivered' && userEmail) {
-      await this.email.sendOrderDelivered(userEmail, {
-        customer_name: customerName,
-        order_id: order.order_number,
-        order_db_id: id,
-      }).catch(() => {});
+    if (dto.status === 'delivered') {
+      if (userEmail) {
+        await this.email.sendOrderDelivered(userEmail, {
+          customer_name: customerName,
+          order_id: order.order_number,
+          order_db_id: id,
+        }).catch(() => {});
+      }
     }
 
     return { message: 'Status updated' };
@@ -692,7 +705,7 @@ export class OrdersService {
     }
     const { data: order } = await this.db.client
       .from('orders')
-      .select('id, order_number, status, fulfillment_status, payment_status, payment_method, total, created_at, guest_email, awb_code, courier_name, shiprocket_status, order_items(quantity, unit_price, product_name, variant_label)')
+      .select('id, order_number, status, fulfillment_status, payment_status, payment_method, total, created_at, guest_email, awb_code, courier_name, shiprocket_status, order_items(quantity, snapshot_price, snapshot_name, snapshot_size, snapshot_colour)')
       .eq('order_number', orderNumber.toUpperCase())
       .single();
 
@@ -719,10 +732,10 @@ export class OrdersService {
       courier_name:       order.courier_name   || null,
       shiprocket_status:  order.shiprocket_status || null,
       items: (order.order_items || []).map((it: any) => ({
-        product_name:  it.product_name,
-        variant_label: it.variant_label,
+        product_name:  it.snapshot_name,
+        variant_label: [it.snapshot_size, it.snapshot_colour].filter(Boolean).join(' / ') || null,
         quantity:      it.quantity,
-        unit_price:    it.unit_price,
+        unit_price:    it.snapshot_price,
       })),
     };
   }
@@ -888,18 +901,19 @@ export class OrdersService {
     const rows = data || [];
 
     const header = 'order_number,status,payment_status,payment_method,total,customer_name,customer_email,coupon_code,discount,created_at';
-    const lines = rows.map((o: any) => {
-      const total    = (Number(o.total) / 100).toFixed(2);
-      const discount = (Number(o.discount || 0) / 100).toFixed(2);
-      const name     = o.users?.name  || '';
-      const email    = o.users?.email || '';
-      return [
-        o.order_number, o.status, o.payment_status, o.payment_method,
-        total, `"${name}"`, email, o.coupon_code || '', discount,
-        new Date(o.created_at).toISOString().slice(0, 10),
-      ].join(',');
-    });
+    const lines = rows.map((o: any) => [
+      o.order_number,
+      o.status,
+      o.payment_status || '',
+      o.payment_method || '',
+      (o.total / 100).toFixed(2),
+      (o.users as any)?.name || o.guest_email || '',
+      (o.users as any)?.email || o.guest_email || '',
+      o.coupon_code || '',
+      o.discount ? (o.discount / 100).toFixed(2) : '0',
+      new Date(o.created_at).toISOString(),
+    ].map((v: any) => `"${String(v).replace(/"/g, '""')}"`).join(','));
 
-    return [header, ...lines].join('\n');
+    return `${header}\n${lines.join('\n')}`;
   }
 }

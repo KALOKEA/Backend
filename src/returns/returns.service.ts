@@ -86,6 +86,18 @@ export class ReturnsService {
       }
     }
 
+    // Send rejection email when admin moves status to 'rejected'
+    if (status === 'rejected' && existing) {
+      const userEmail = (existing.users as any)?.email;
+      if (userEmail) {
+        this.email.sendReturnRejected(userEmail, {
+          customer_name: (existing.users as any)?.name || 'Customer',
+          order_id: (existing.orders as any)?.order_number || existing.order_id,
+          reason: adminNotes,
+        }).catch(() => {});
+      }
+    }
+
     return data;
   }
 

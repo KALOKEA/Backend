@@ -81,11 +81,16 @@ export class CreateOrderDto {
 
   @IsOptional()
   @IsString()
+  @Matches(
+    /^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}$/,
+    { message: 'gstin must be a valid 15-character Indian GSTIN (e.g. 29ABCDE1234F1Z5)' },
+  )
   gstin?: string;
 
   // Fallback cart items from the frontend (used when server cart is missing).
-  // Prices are always loaded server-side — client only provides variant_id+qty.
+  // Prices are re-validated server-side — never trust client-submitted prices.
+  // This field is optional fallback when server cart is unavailable.
   @IsOptional()
   @IsArray()
-  client_items?: Array<{ variant_id: string; quantity: number }>;
+  cart_items?: any[];
 }

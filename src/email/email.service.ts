@@ -603,6 +603,16 @@ export class EmailService {
 
   // ── Contact form forward ───────────────────────────────────────────────────
 
+  /** Escape user-supplied text before embedding in HTML (prevents XSS in admin email). */
+  private escapeHtml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#x27;');
+  }
+
   async sendContactForm(vars: {
     name: string;
     email: string;
@@ -610,6 +620,10 @@ export class EmailService {
   }): Promise<void> {
     const adminEmail = this.config.get<string>('ADMIN_EMAIL');
     if (!adminEmail) return;
+    // Escape all user-provided values before embedding in HTML (XSS prevention)
+    const safeName    = this.escapeHtml(vars.name);
+    const safeEmail   = this.escapeHtml(vars.email);
+    const safeMessage = this.escapeHtml(vars.message);
     const body = `
       <p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         A new message has been submitted via the contact form.
@@ -618,11 +632,11 @@ export class EmailService {
         <tr><td style="padding:12px 16px;background:#faf8f5;border-bottom:1px solid #e8e4e0;">
           <span style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#6b6b6b;">From</span>
         </td><td style="padding:12px 16px;background:#faf8f5;border-bottom:1px solid #e8e4e0;text-align:right;">
-          <strong style="color:#0a0a0a;">${vars.name}</strong> &lt;${vars.email}&gt;
+          <strong style="color:#0a0a0a;">${safeName}</strong> &lt;${safeEmail}&gt;
         </td></tr>
         <tr><td colspan="2" style="padding:16px;">
           <span style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#6b6b6b;">Message</span>
-          <p style="margin:8px 0 0;font-size:14px;line-height:1.7;color:#0a0a0a;white-space:pre-wrap;">${vars.message}</p>
+          <p style="margin:8px 0 0;font-size:14px;line-height:1.7;color:#0a0a0a;white-space:pre-wrap;">${safeMessage}</p>
         </td></tr>
       </table>
       <p style="margin:0;font-size:13px;color:#6b6b6b;">Reply directly to this email to respond to the customer.</p>
@@ -666,7 +680,7 @@ export class EmailService {
           <span style="font-size:14px;color:#0a0a0a;margin-top:4px;display:block;">${vars.reason}</span>
         </td></tr>` : ''}
       </table>
-      <p style="margin:0;font-size:13px;color:#6b6b6b;">Log in to the admin panel to review and approve or reject this return.</p>
+      <p style="margin:0;font-size:13px;color:#6b6b6b;">Log in to the admin panel to review this return.</p>
     `;
     const html = this.layout({
       preheader: `Return filed for order #${vars.order_id}`,
@@ -675,5 +689,127 @@ export class EmailService {
       body,
     });
     await this.send(adminEmail, `Return filed — #${vars.order_id}`, html, undefined, 'admin_return_filed');
+  }
+
+  // ── Return rejected (customer notification) ────────────────────────────────
+
+  async sendReturnRejected(to: string, vars: {
+    customer_name: string;
+    order_id: string;
+    reason?: string;
+  }): Promise<void> {
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const body = `
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Hi ${vars.customer_name}, unfortunately we are unable to approve your return request
+        for order <strong style="color:#0a0a0a;">#${vars.order_id}</strong>.
+      </p>
+      ${vars.reason ? `
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+             style="background:#faf8f5;border:1px solid #e8e4e0;border-radius:8px;margin-bottom:22px;">
+        <tr><td style="padding:16px 20px;">
+          <p style="margin:0 0 6px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#9a9a9a;">Reason</p>
+          <p style="margin:0;font-size:14px;line-height:1.7;color:#0a0a0a;">${vars.reason}</p>
+        </td></tr>
+      </table>` : ''}
+      <p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        If you believe this decision was made in error, please contact our support team at
+        <a href="mailto:support@kalokea.in" style="color:#0a0a0a;">support@kalokea.in</a>.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0">
+        <tr><td style="border-radius:6px;background:#0a0a0a;">
+          <a href="${siteUrl}/account/orders"
+             style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
+            View My Orders
+          </a>
+        </td></tr>
+      </table>
+    `;
+    const html = this.layout({
+      preheader: `Return request for order #${vars.order_id}`,
+      eyebrow: 'Return Update',
+      heading: 'Return request not approved',
+      body,
+    });
+    await this.send(to, `Return request — #${vars.order_id}`, html, undefined, 'return_rejected');
+  }
+
+  // ── Order processing (picking & packing started) ───────────────────────────
+
+  async sendOrderProcessing(to: string, vars: {
+    customer_name: string;
+    order_id: string;
+  }): Promise<void> {
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const body = `
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Hi ${vars.customer_name}, great news — your order
+        <strong style="color:#0a0a0a;">#${vars.order_id}</strong> is now being picked
+        and packed by our team.
+      </p>
+      <p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        You will receive another email with your tracking details once it is
+        handed to the courier.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0">
+        <tr><td style="border-radius:6px;background:#0a0a0a;">
+          <a href="${siteUrl}/account/orders"
+             style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
+            Track My Order
+          </a>
+        </td></tr>
+      </table>
+    `;
+    const html = this.layout({
+      preheader: `Your order #${vars.order_id} is being packed`,
+      eyebrow: 'Order Update',
+      heading: 'Your order is being prepared',
+      body,
+    });
+    await this.send(to, `Order in progress — #${vars.order_id}`, html, undefined, 'order_processing');
+  }
+
+  // ── ShipRocket: AWB assigned ───────────────────────────────────────────────
+
+  async sendOrderAwbAssigned(to: string, vars: {
+    customer_name: string;
+    order_id: string;
+    awb_code: string;
+    courier_name: string;
+  }): Promise<void> {
+    const body = `
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Hi ${vars.customer_name}, your order <strong style="color:#0a0a0a;">#${vars.order_id}</strong>
+        has been shipped via <strong style="color:#0a0a0a;">${vars.courier_name}</strong>.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%"
+             style="margin:0 0 22px;border:1px solid #e8e4e0;border-radius:6px;overflow:hidden;">
+        <tr><td style="padding:12px 16px;background:#faf8f5;border-bottom:1px solid #e8e4e0;">
+          <span style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#6b6b6b;">AWB / Tracking</span>
+        </td><td style="padding:12px 16px;background:#faf8f5;border-bottom:1px solid #e8e4e0;text-align:right;">
+          <strong style="color:#0a0a0a;">${vars.awb_code}</strong>
+        </td></tr>
+        <tr><td style="padding:12px 16px;">
+          <span style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#6b6b6b;">Courier</span>
+        </td><td style="padding:12px 16px;text-align:right;">
+          <strong style="color:#0a0a0a;">${vars.courier_name}</strong>
+        </td></tr>
+      </table>
+      <table role="presentation" cellpadding="0" cellspacing="0">
+        <tr><td style="border-radius:6px;background:#0a0a0a;">
+          <a href="https://shiprocket.co/tracking/${vars.awb_code}"
+             style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
+            Track Shipment
+          </a>
+        </td></tr>
+      </table>
+    `;
+    const html = this.layout({
+      preheader: `Your order #${vars.order_id} is on its way`,
+      eyebrow: 'Shipment Update',
+      heading: 'Your order has been shipped',
+      body,
+    });
+    await this.send(to, `Shipped — #${vars.order_id}`, html, undefined, 'order_awb_assigned');
   }
 }
