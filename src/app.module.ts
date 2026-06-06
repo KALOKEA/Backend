@@ -31,6 +31,7 @@ import { ExchangesModule } from './exchanges/exchanges.module';
 import { SmsModule } from './sms/sms.module';
 import { ContactModule } from './contact/contact.module';
 import { CronModule } from './cron/cron.module';
+import { HomepageContentModule } from './homepage-content/homepage-content.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { validate } from './config/env.validation';
 
@@ -66,6 +67,7 @@ import { validate } from './config/env.validation';
     SmsModule,
     ContactModule,
     CronModule,
+    HomepageContentModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
