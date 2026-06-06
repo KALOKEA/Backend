@@ -25,11 +25,12 @@ export class CartService {
         .from('carts').insert({ session_id: sessionId }).select().single();
       return data;
     }
-    throw new BadRequestException('User ID or session ID required');
+    return null; // no identity — caller should handle gracefully
   }
 
   async getCart(userId?: string, sessionId?: string) {
     const cart = await this.getOrCreateCart(userId, sessionId);
+    if (!cart) return { cart_id: null, items: [] };
     const { data: items } = await this.db.client
       .from('cart_items')
       .select(`
@@ -45,6 +46,7 @@ export class CartService {
 
   async addItem(dto: AddToCartDto, userId?: string) {
     const cart = await this.getOrCreateCart(userId, dto.session_id);
+    if (!cart) throw new BadRequestException('User ID or session ID required');
 
     // Check variant stock
     const { data: variant } = await this.db.client
@@ -78,6 +80,7 @@ export class CartService {
    */
   private async assertItemOwnership(itemId: string, userId?: string, sessionId?: string): Promise<string> {
     const cart = await this.getOrCreateCart(userId, sessionId);
+    if (!cart) throw new BadRequestException('User ID or session ID required');
     const { data: item } = await this.db.client
       .from('cart_items').select('id, cart_id').eq('id', itemId).single();
     if (!item || item.cart_id !== cart.id) {
