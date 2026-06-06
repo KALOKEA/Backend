@@ -51,4 +51,8 @@ export class CreateProductDto {
   @IsOptional()
   @IsNumber()
   gst_rate?: number;
+
+  @IsOptional()
+  @IsString()
+  video_url?: string;
 }
