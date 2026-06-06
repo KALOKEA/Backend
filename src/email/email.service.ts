@@ -601,6 +601,41 @@ export class EmailService {
     await this.send(to, `Order cancelled — #${vars.order_id}`, html, undefined, 'order_cancelled');
   }
 
+  // ── Contact form forward ───────────────────────────────────────────────────
+
+  async sendContactForm(vars: {
+    name: string;
+    email: string;
+    message: string;
+  }): Promise<void> {
+    const adminEmail = this.config.get<string>('ADMIN_EMAIL');
+    if (!adminEmail) return;
+    const body = `
+      <p style="margin:0 0 14px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        A new message has been submitted via the contact form.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 22px;border:1px solid #e8e4e0;border-radius:6px;overflow:hidden;">
+        <tr><td style="padding:12px 16px;background:#faf8f5;border-bottom:1px solid #e8e4e0;">
+          <span style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#6b6b6b;">From</span>
+        </td><td style="padding:12px 16px;background:#faf8f5;border-bottom:1px solid #e8e4e0;text-align:right;">
+          <strong style="color:#0a0a0a;">${vars.name}</strong> &lt;${vars.email}&gt;
+        </td></tr>
+        <tr><td colspan="2" style="padding:16px;">
+          <span style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#6b6b6b;">Message</span>
+          <p style="margin:8px 0 0;font-size:14px;line-height:1.7;color:#0a0a0a;white-space:pre-wrap;">${vars.message}</p>
+        </td></tr>
+      </table>
+      <p style="margin:0;font-size:13px;color:#6b6b6b;">Reply directly to this email to respond to the customer.</p>
+    `;
+    const html = this.layout({
+      preheader: `Contact form: ${vars.name}`,
+      eyebrow: 'Customer Message',
+      heading: 'New contact form submission',
+      body,
+    });
+    await this.send(adminEmail, `Contact: ${vars.name} <${vars.email}>`, html, undefined, 'contact_form');
+  }
+
   // ── Admin: return filed alert ──────────────────────────────────────────────
 
   async sendAdminReturnFiled(vars: {
