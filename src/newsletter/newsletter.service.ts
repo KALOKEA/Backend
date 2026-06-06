@@ -10,25 +10,17 @@ export class NewsletterService {
 
   async subscribe(email: string) {
     const normalized = email.trim().toLowerCase();
-
-    // Upsert so re-subscribing (or reactivating after unsubscribe) is idempotent
-    // and never throws on the unique-email constraint.
     const { error } = await this.db.client
       .from('newsletter_subscribers')
       .upsert({ email: normalized, is_active: true }, { onConflict: 'email' });
-
     if (error) {
       this.logger.error(`Newsletter subscribe failed: ${error.message}`);
     } else {
-      // Fire-and-forget welcome email (no-op if BREVO_API_KEY isn't set).
       await this.email.sendNewsletterWelcome(normalized).catch(() => {});
     }
-
-    // Always respond the same way — avoids leaking whether an email already exists.
     return { message: 'Subscribed' };
   }
 
-  /** Soft-delete: set is_active = false. Required by DPDP Act 2023 (MC-5). */
   async unsubscribe(email: string) {
     const normalized = email.trim().toLowerCase();
     const { error } = await this.db.client
@@ -38,7 +30,38 @@ export class NewsletterService {
     if (error) {
       this.logger.error(`Newsletter unsubscribe failed: ${error.message}`);
     }
-    // Always 200 — avoids leaking whether the email was subscribed.
     return { message: 'Unsubscribed successfully' };
+  }
+
+  async listSubscribers(page = 1, limit = 50, active?: string) {
+    const from = (page - 1) * limit;
+    let q = this.db.client
+      .from('newsletter_subscribers')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, from + limit - 1);
+
+    if (active === 'true') q = q.eq('is_active', true);
+    if (active === 'false') q = q.eq('is_active', false);
+
+    const { data, count } = await q;
+    return {
+      data: data || [],
+      meta: { total: count ?? 0, page, limit, total_pages: Math.ceil((count ?? 0) / limit) },
+    };
+  }
+
+  async exportCsv(): Promise<string> {
+    const { data } = await this.db.client
+      .from('newsletter_subscribers')
+      .select('email, is_active, created_at')
+      .order('created_at', { ascending: false });
+
+    const rows = data || [];
+    const header = 'email,status,subscribed_at';
+    const lines = rows.map((r: any) =>
+      `${r.email},${r.is_active ? 'active' : 'unsubscribed'},${r.created_at}`
+    );
+    return [header, ...lines].join('\n');
   }
 }

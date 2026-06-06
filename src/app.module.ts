@@ -32,6 +32,7 @@ import { SmsModule } from './sms/sms.module';
 import { ContactModule } from './contact/contact.module';
 import { CronModule } from './cron/cron.module';
 import { HomepageContentModule } from './homepage-content/homepage-content.module';
+import { ShiprocketModule } from './shiprocket/shiprocket.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { validate } from './config/env.validation';
 
@@ -68,11 +69,8 @@ import { validate } from './config/env.validation';
     ContactModule,
     CronModule,
     HomepageContentModule,
+    ShiprocketModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
-    { provide: APP_GUARD, useClass: JwtAuthGuard },
-    { provide: APP_INTERCEPTOR, useClass: AdminAuditInterceptor },
-  ],
-})
-export class AppModule {}
+    { provide: APP_GUARD, useClass: JwtAut

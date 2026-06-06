@@ -119,4 +119,24 @@ export class AdminService {
       meta: { total: count || 0, page, limit, total_pages: Math.ceil((count || 0) / limit) },
     };
   }
+
+  async getEmailLog(page = 1, limit = 50, status?: string, emailType?: string) {
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    let q = this.db.client
+      .from('email_log')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    if (status) q = q.eq('status', status);
+    if (emailType) q = q.eq('email_type', emailType);
+
+    const { data, count } = await q;
+    return {
+      data: data || [],
+      meta: { total: count || 0, page, limit, total_pages: Math.ceil((count || 0) / limit) },
+    };
+  }
 }

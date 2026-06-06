@@ -36,4 +36,14 @@ export class AdminController {
   ) {
     return this.admin.getActivityLog(+page, +limit, action, entityType);
   }
+
+  @Get('email-log')
+  getEmailLog(
+    @Query('page') page = '1',
+    @Query('limit') limit = '50',
+    @Query('status') status?: string,
+    @Query('email_type') emailType?: string,
+  ) {
+    return this.admin.getEmailLog(+page, +limit, status, emailType);
+  }
 }

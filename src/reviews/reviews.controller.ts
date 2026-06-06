@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ReviewsService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { Public } from '../common/decorators/public.decorator';
@@ -16,6 +17,7 @@ export class ReviewsController {
     return this.reviews.findByProduct(productId);
   }
 
+  @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 reviews/min per IP
   @Post()
   create(@Body() dto: CreateReviewDto, @CurrentUser() user: any) {
     return this.reviews.create(dto, user.id);

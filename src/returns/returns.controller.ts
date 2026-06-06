@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Patch, Body, Param, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ReturnsService } from './returns.service';
 import { CreateReturnDto } from './dto/create-return.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -9,6 +10,7 @@ import { AdminAction } from '../common/decorators/admin-action.decorator';
 export class ReturnsController {
   constructor(private returns: ReturnsService) {}
 
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 return requests/min per IP
   @Post()
   create(@Body() dto: CreateReturnDto, @CurrentUser() user: any) {
     return this.returns.create(dto, user.id);

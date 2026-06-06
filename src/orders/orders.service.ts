@@ -692,7 +692,7 @@ export class OrdersService {
     }
     const { data: order } = await this.db.client
       .from('orders')
-      .select('id, order_number, status, fulfillment_status, payment_status, payment_method, total, created_at, guest_email, order_items(quantity, unit_price, product_name, variant_label)')
+      .select('id, order_number, status, fulfillment_status, payment_status, payment_method, total, created_at, guest_email, awb_code, courier_name, shiprocket_status, order_items(quantity, unit_price, product_name, variant_label)')
       .eq('order_number', orderNumber.toUpperCase())
       .single();
 
@@ -707,18 +707,22 @@ export class OrdersService {
 
     // Return only safe public fields — never expose internal IDs or full address
     return {
-      order_number: order.order_number,
-      status: order.status,
+      order_number:       order.order_number,
+      status:             order.status,
       fulfillment_status: order.fulfillment_status,
-      payment_status: order.payment_status,
-      payment_method: order.payment_method,
-      total: order.total,
-      created_at: order.created_at,
+      payment_status:     order.payment_status,
+      payment_method:     order.payment_method,
+      total:              order.total,
+      created_at:         order.created_at,
+      // ShipRocket tracking (only surfaced when AWB exists)
+      awb_code:           order.awb_code       || null,
+      courier_name:       order.courier_name   || null,
+      shiprocket_status:  order.shiprocket_status || null,
       items: (order.order_items || []).map((it: any) => ({
-        product_name: it.product_name,
+        product_name:  it.product_name,
         variant_label: it.variant_label,
-        quantity: it.quantity,
-        unit_price: it.unit_price,
+        quantity:      it.quantity,
+        unit_price:    it.unit_price,
       })),
     };
   }
@@ -871,83 +875,4 @@ export class OrdersService {
         coupon_code, discount,
         address_snapshot, company_name, gstin,
         created_at,
-        users(name, email, phone),
-        order_items(
-          snapshot_name, quantity, snapshot_price,
-          hsn_code, gst_rate, taxable_value, gst_amount
-        )
-      `)
-      .order('created_at', { ascending: false });
-
-    if (filters.status) q = q.eq('status', filters.status);
-    if (filters.from)   q = q.gte('created_at', filters.from);
-    if (filters.to)     q = q.lte('created_at', filters.to);
-
-    const { data: orders } = await q;
-    if (!orders || !orders.length) return 'No orders found';
-
-    const rupees = (p: number) => p != null ? (Math.round(p) / 100).toFixed(2) : '';
-    const esc = (v: any) => {
-      const s = String(v ?? '');
-      return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-
-    const header = [
-      'Order Number', 'Date', 'Status', 'Payment Status', 'Payment Method',
-      'Customer Name', 'Customer Email', 'Customer Phone',
-      'Shipping Name', 'Shipping Address', 'City', 'State', 'PIN',
-      'Company (GSTIN)', 'GSTIN',
-      'Product', 'HSN', 'GST Rate %', 'Qty', 'Unit Price ₹',
-      'Line Taxable ₹', 'Line GST ₹', 'Line Total ₹',
-      'Coupon', 'Discount ₹', 'Shipping ₹', 'Order Taxable ₹', 'Order GST ₹', 'Order Total ₹',
-    ];
-
-    const rows: string[][] = [];
-
-    for (const o of orders) {
-      const addr = o.address_snapshot || {};
-      const items: any[] = o.order_items || [{}];
-
-      for (let i = 0; i < items.length; i++) {
-        const it = items[i];
-        const unitPrice = it.snapshot_price ?? 0;
-        const lineTotal = unitPrice * (it.quantity ?? 1);
-
-        rows.push([
-          o.order_number,
-          new Date(o.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-          o.status,
-          o.payment_status,
-          o.payment_method,
-          (o.users as any)?.name || addr.first_name || '',
-          (o.users as any)?.email || '',
-          (o.users as any)?.phone || addr.phone || '',
-          addr.first_name ? `${addr.first_name} ${addr.last_name || ''}`.trim() : addr.name || '',
-          addr.address_line1 || addr.street || '',
-          addr.city || '',
-          addr.state || '',
-          addr.postal_code || addr.pincode || '',
-          o.company_name || '',
-          o.gstin || '',
-          it.snapshot_name || '',
-          it.hsn_code || '',
-          it.gst_rate != null ? String(it.gst_rate) : '',
-          it.quantity != null ? String(it.quantity) : '',
-          rupees(unitPrice),
-          rupees(it.taxable_value),
-          rupees(it.gst_amount),
-          rupees(lineTotal),
-          // Order-level fields — only on first item row to avoid duplication
-          i === 0 ? (o.coupon_code || '') : '',
-          i === 0 ? rupees(o.discount) : '',
-          i === 0 ? rupees(o.shipping_fee) : '',
-          i === 0 ? rupees(o.taxable_value) : '',
-          i === 0 ? rupees(o.total_gst) : '',
-          i === 0 ? rupees(o.total) : '',
-        ]);
-      }
-    }
-
-    return [header, ...rows].map(r => r.map(esc).join(',')).join('\r\n');
-  }
-}
+        us
