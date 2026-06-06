@@ -2,6 +2,7 @@ import { Controller, Post, Body, Req, UseGuards } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentOrderDto } from './dto/create-payment-order.dto';
 import { RefundDto } from './dto/refund.dto';
+import { VerifyPaymentDto } from './dto/verify-payment.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
@@ -24,6 +25,17 @@ export class PaymentsController {
   @Post('refund')
   refund(@Body() dto: RefundDto) {
     return this.payments.refund(dto);
+  }
+
+  /**
+   * Client-side payment signature verification.
+   * Called from the Razorpay handler() callback before showing the success page.
+   * Public because the user may not yet have a valid access token at this point.
+   */
+  @Public()
+  @Post('verify')
+  verifyPayment(@Body() dto: VerifyPaymentDto) {
+    return this.payments.verifyPayment(dto);
   }
 
   @Public()

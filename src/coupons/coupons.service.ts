@@ -21,6 +21,22 @@ export class CouponsService {
       throw new BadRequestException('Coupon expired');
     if (coupon.max_uses && coupon.used_count >= coupon.max_uses)
       throw new BadRequestException('Coupon usage limit reached');
+
+    // Per-user cap check: count how many times this user has already redeemed
+    // this coupon. Only enforced when max_per_user is set and user_id is known.
+    if (coupon.max_per_user && dto.user_id) {
+      const { count } = await this.db.client
+        .from('coupon_uses')
+        .select('id', { count: 'exact', head: true })
+        .eq('coupon_id', coupon.id)
+        .eq('user_id', dto.user_id);
+      if ((count ?? 0) >= coupon.max_per_user) {
+        throw new BadRequestException(
+          `This coupon can only be used ${coupon.max_per_user} time${coupon.max_per_user === 1 ? '' : 's'} per customer`,
+        );
+      }
+    }
+
     if (dto.order_value < coupon.min_order_value)
       throw new BadRequestException(`Minimum order value ₹${coupon.min_order_value} required`);
 

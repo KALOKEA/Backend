@@ -147,6 +147,37 @@ export class PaymentsService {
     };
   }
 
+  /**
+   * Client-side payment verification. Called by the frontend Razorpay handler()
+   * callback before showing the success page. Verifies the Razorpay signature
+   * using HMAC-SHA256 so a failed payment can never show the success screen.
+   *
+   * Razorpay signs: `razorpay_order_id + '|' + razorpay_payment_id`
+   */
+  async verifyPayment(dto: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) {
+    const keySecret = this.config.get<string>('RAZORPAY_KEY_SECRET');
+    if (!keySecret) throw new BadRequestException('Payment gateway not configured');
+
+    const body = `${dto.razorpay_order_id}|${dto.razorpay_payment_id}`;
+    const expectedSignature = crypto
+      .createHmac('sha256', keySecret)
+      .update(body)
+      .digest('hex');
+
+    const expectedBuf = Buffer.from(expectedSignature, 'hex');
+    const providedBuf = Buffer.from(dto.razorpay_signature || '', 'hex');
+
+    if (
+      expectedBuf.length !== providedBuf.length ||
+      !crypto.timingSafeEqual(expectedBuf, providedBuf)
+    ) {
+      this.logger.warn(`Invalid Razorpay payment signature for order ${dto.razorpay_order_id}`);
+      throw new BadRequestException('Payment verification failed. Please contact support.');
+    }
+
+    return { verified: true };
+  }
+
   async handleWebhook(req: RawBodyRequest<Request>) {
     const webhookSecret = this.config.get('RAZORPAY_WEBHOOK_SECRET');
     const signature = req.headers['x-razorpay-signature'] as string;

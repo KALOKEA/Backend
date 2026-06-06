@@ -3,7 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
 
-/** Alert when a variant's stock drops to this level or below. */
+/** Fallback when store_settings.low_stock_threshold is not set. */
 const DEFAULT_LOW_STOCK_THRESHOLD = 5;
 
 @Injectable()
@@ -56,7 +56,13 @@ export class CronService {
   @Cron('0 8 * * *')
   async checkLowStock() {
     try {
-      const threshold = DEFAULT_LOW_STOCK_THRESHOLD;
+      // Read threshold from admin store_settings (configurable), fall back to default.
+      const { data: settings } = await this.db.client
+        .from('store_settings')
+        .select('low_stock_threshold')
+        .limit(1)
+        .single();
+      const threshold: number = settings?.low_stock_threshold ?? DEFAULT_LOW_STOCK_THRESHOLD;
 
       const { data: variants } = await this.db.client
         .from('product_variants')

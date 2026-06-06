@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, Res, UseGuards, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, Res, UseGuards, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Response } from 'express';
+import { Throttle } from '@nestjs/throttler';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
@@ -19,6 +20,7 @@ export class OrdersController {
   // GET /orders/my. Previously @Public alone left user undefined → null user_id.
   @Public()
   @UseGuards(OptionalJwtAuthGuard)
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 orders/min per IP — prevents spam/inventory exhaustion
   @Post()
   create(@Body() dto: CreateOrderDto, @CurrentUser() user: any) {
     return this.orders.createOrder(dto, user?.id);
@@ -65,9 +67,20 @@ export class OrdersController {
     return this.orders.cancelOrder(id, user.id);
   }
 
+  /**
+   * Printable tax invoice. Authenticated users must own the order. Guests access
+   * via ?guest_email=<email> — the email must match order.guest_email. Both checks
+   * are enforced inside getInvoice() after loading the order.
+   */
+  @Public()
+  @UseGuards(OptionalJwtAuthGuard)
   @Get(':id/invoice')
-  getInvoice(@Param('id') id: string, @CurrentUser() user: any) {
-    return this.orders.getInvoice(id, user);
+  getInvoice(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Query('guest_email') guestEmail?: string,
+  ) {
+    return this.orders.getInvoice(id, user, guestEmail);
   }
 
   @Get(':id')

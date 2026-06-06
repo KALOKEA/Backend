@@ -21,6 +21,12 @@ export class CreateCouponDto {
   @IsNumber()
   max_uses?: number;
 
+  /** Maximum redemptions per individual user. NULL = no per-user limit. */
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  max_per_user?: number;
+
   @IsOptional()
   valid_until?: string;
 

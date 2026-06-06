@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, InternalServerErrorException, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
 import { CouponsService } from '../coupons/coupons.service';
@@ -22,6 +23,7 @@ export class OrdersService {
     private coupons: CouponsService,
     private settings: SettingsService,
     private gst: GstService,
+    private config: ConfigService,
   ) {}
 
   private generateOrderNumber(): string {
@@ -220,7 +222,7 @@ export class OrdersService {
       (s: number, it: any) => s + it.product_variants.price * it.quantity, 0);
     if (dto.coupon_code) {
       try {
-        const result = await this.coupons.validate({ code: dto.coupon_code, order_value: subtotalRaw });
+        const result = await this.coupons.validate({ code: dto.coupon_code, order_value: subtotalRaw, user_id: userId });
         discount = result.discount;
       } catch (e: any) {
         couponError = e?.message || 'Invalid coupon';
@@ -276,6 +278,12 @@ export class OrdersService {
     }
     if (!addressSnapshot) throw new BadRequestException('Delivery address required');
 
+    // Guest orders must include an email — needed for order confirmation,
+    // shipping updates, and invoice access (GET /orders/:id/invoice?guest_email=).
+    if (!userId && !dto.guest_email) {
+      throw new BadRequestException('Email address is required to place an order as a guest');
+    }
+
     const paymentMethod = dto.payment_method === 'cod' ? 'cod' : 'razorpay';
 
     // Server-authoritative coupon (client discount is display-only).
@@ -284,7 +292,7 @@ export class OrdersService {
     if (dto.coupon_code) {
       const subtotalRaw = cartItems.reduce(
         (s: number, it: any) => s + it.product_variants.price * it.quantity, 0);
-      const result = await this.coupons.validate({ code: dto.coupon_code, order_value: subtotalRaw });
+      const result = await this.coupons.validate({ code: dto.coupon_code, order_value: subtotalRaw, user_id: userId });
       discount = result.discount;
       appliedCoupon = { id: result.coupon_id, code: result.code };
     }
@@ -549,8 +557,8 @@ export class OrdersService {
 
     // Trigger Razorpay refund if order was paid online
     if (order.payment_status === 'paid' && order.payment_method !== 'cod' && order.razorpay_payment_id) {
-      const keyId = process.env.RAZORPAY_KEY_ID;
-      const keySecret = process.env.RAZORPAY_KEY_SECRET;
+      const keyId = this.config.get<string>('RAZORPAY_KEY_ID');
+      const keySecret = this.config.get<string>('RAZORPAY_KEY_SECRET');
       if (keyId && keySecret) {
         const refundRes = await fetch(
           `https://api.razorpay.com/v1/payments/${order.razorpay_payment_id}/refund`,
@@ -624,7 +632,17 @@ export class OrdersService {
       .from('orders').select('*, users(email, name)').eq('id', id).single();
     if (!order) throw new NotFoundException('Order not found');
 
-    await this.db.client.from('orders').update({ status: dto.status }).eq('id', id);
+    // Sync fulfillment_status for statuses that map 1:1.
+    const fulfillmentMap: Record<string, string> = {
+      shipped: 'shipped',
+      delivered: 'delivered',
+      cancelled: 'cancelled',
+    };
+    const fulfillmentUpdate: Record<string, string> = { status: dto.status };
+    if (fulfillmentMap[dto.status]) {
+      fulfillmentUpdate.fulfillment_status = fulfillmentMap[dto.status];
+    }
+    await this.db.client.from('orders').update(fulfillmentUpdate).eq('id', id);
 
     const userEmail = (order.users as any)?.email;
     const customerName = (order.users as any)?.name || 'Customer';
@@ -657,7 +675,7 @@ export class OrdersService {
    * historical invoice never changes if the store rate later changes. Seller
    * details come from admin Settings. Ownership enforced (customer = own only).
    */
-  async getInvoice(id: string, user?: { id: string; role: string }): Promise<string> {
+  async getInvoice(id: string, user?: { id: string; role: string }, guestEmail?: string): Promise<string> {
     const { data: order } = await this.db.client
       .from('orders')
       .select('*, order_items(*)')
@@ -666,7 +684,15 @@ export class OrdersService {
     if (!order) throw new NotFoundException('Order not found');
 
     const isAdmin = user?.role === 'admin';
-    if (!isAdmin && order.user_id !== user?.id) {
+    const isOwner = user?.id && order.user_id === user.id;
+    // Guests can access their invoice by providing the email used at checkout.
+    const isGuestOwner =
+      !order.user_id &&
+      guestEmail &&
+      order.guest_email &&
+      order.guest_email.toLowerCase() === guestEmail.toLowerCase();
+
+    if (!isAdmin && !isOwner && !isGuestOwner) {
       throw new NotFoundException('Order not found');
     }
     return this.renderInvoiceHtml(order);
