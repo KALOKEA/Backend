@@ -124,7 +124,7 @@ export class AuthService {
         .eq('id', existing.id);
     }
 
-    const access_token = this.jwt.sign({ sub: user.id, role: user.role }, { expiresIn: '15m' });
+    const access_token = this.jwt.sign({ sub: user.id, role: user.role }, { expiresIn: '7d' });
     // Refresh token carries the user's token_version; bumping that column
     // (logout / revoke) invalidates every outstanding refresh token.
     const refresh_token = this.jwt.sign(
@@ -175,7 +175,7 @@ export class AuthService {
     // effect on the next refresh without forcing a full re-login.
     const access_token = this.jwt.sign(
       { sub: payload.sub, role: user.role },
-      { expiresIn: '15m' },
+      { expiresIn: '7d' },
     );
     const refresh_token = this.jwt.sign(
       { sub: payload.sub, role: user.role, tv: nextVersion },
