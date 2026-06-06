@@ -13,6 +13,7 @@ export interface StoreSettings {
   shipping_free_threshold: number; // paise
   cod_fee: number;                 // paise
   live_chat_widget: string;        // embed HTML/script for chat widget
+  low_stock_threshold: number;     // alert when stock drops below this
 }
 
 const DEFAULTS: StoreSettings = {
@@ -26,6 +27,7 @@ const DEFAULTS: StoreSettings = {
   shipping_free_threshold: 99900,
   cod_fee: 4900,
   live_chat_widget: '',
+  low_stock_threshold: 5,
 };
 
 @Injectable()
@@ -43,6 +45,7 @@ export class SettingsService {
       shipping_fee: Number(data?.shipping_fee ?? DEFAULTS.shipping_fee),
       shipping_free_threshold: Number(data?.shipping_free_threshold ?? DEFAULTS.shipping_free_threshold),
       cod_fee: Number(data?.cod_fee ?? DEFAULTS.cod_fee),
+      low_stock_threshold: Number(data?.low_stock_threshold ?? DEFAULTS.low_stock_threshold),
     };
   }
 

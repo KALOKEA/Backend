@@ -19,4 +19,7 @@ export class UpdateSettingsDto {
 
   /** Live chat widget embed script (Tawk.to / Crisp / WhatsApp). */
   @IsOptional() @IsString() live_chat_widget?: string;
+
+  /** Low stock alert threshold — notify admin when product stock drops below this. */
+  @IsOptional() @IsNumber() @Min(1) @Max(100) low_stock_threshold?: number;
 }
