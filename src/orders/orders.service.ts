@@ -877,14 +877,14 @@ export class OrdersService {
         created_at,
         users(name, email),
         order_items(quantity, snapshot_price, snapshot_name, snapshot_sku)
-      \`)
+      `)
       .order('created_at', { ascending: false });
 
-    if (filters.status) q = (q as any).eq('status', filters.status);
-    if (filters.from)   q = (q as any).gte('created_at', filters.from);
-    if (filters.to)     q = (q as any).lte('created_at', filters.to);
+    if (filters.status) q = q.eq('status', filters.status);
+    if (filters.from)   q = q.gte('created_at', filters.from);
+    if (filters.to)     q = q.lte('created_at', filters.to);
 
-    const { data } = await (q as any);
+    const { data } = await q;
     const rows = data || [];
 
     const header = 'order_number,status,payment_status,payment_method,total,customer_name,customer_email,coupon_code,discount,created_at';
