@@ -538,12 +538,13 @@ export class OrdersService {
     // Restore stock for each item
     const items: any[] = order.order_items || [];
     for (const item of items) {
-      await this.db.client.rpc('restock_variant', {
+      const { error: restockErr } = await this.db.client.rpc('restock_variant', {
         p_variant_id: item.variant_id,
         p_qty: item.quantity,
-      }).catch((e: any) => {
-        this.logger.warn(`Stock restore failed for variant ${item.variant_id}: ${e?.message}`);
       });
+      if (restockErr) {
+        this.logger.warn(`Stock restore failed for variant ${item.variant_id}: ${restockErr.message}`);
+      }
     }
 
     // Trigger Razorpay refund if order was paid online
