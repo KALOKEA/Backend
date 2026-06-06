@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
+import * as compression from 'compression';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
@@ -13,6 +14,8 @@ async function bootstrap() {
   // req.ip reflects the real client (needed for correct per-IP rate limiting).
   app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
+  // Compress all responses — typically 60-80% smaller JSON payloads
+  app.use(compression());
   app.use(helmet());
   app.use(cookieParser());
 

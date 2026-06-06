@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Header } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
@@ -19,6 +19,7 @@ export class ProductsController {
   @Public()
   @UseGuards(OptionalJwtAuthGuard)
   @Get()
+  @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
   findAll(@Query() query: ProductQueryDto, @CurrentUser() user: any) {
     if (user?.role !== 'admin') {
       query.include_inactive = false;
@@ -60,6 +61,7 @@ export class ProductsController {
 
   @Public()
   @Get(':slug')
+  @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
   findOne(@Param('slug') slug: string) {
     return this.products.findBySlug(slug);
   }

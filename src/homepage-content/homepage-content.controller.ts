@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Body, UseGuards, Header } from '@nestjs/common';
 import { HomepageContentService } from './homepage-content.service';
 import { UpdateContentDto } from './dto/update-content.dto';
 import { AdminGuard } from '../common/guards/admin.guard';
@@ -10,8 +10,19 @@ export class HomepageContentController {
 
   /** Public — fetched by the frontend at build/load time. */
   @Get('homepage-content')
+  @Header('Cache-Control', 'public, max-age=300, stale-while-revalidate=600')
   getAll() {
     return this.service.getAll();
+  }
+
+  /**
+   * Aggregated homepage endpoint — CMS + categories + 8 newest products in one
+   * request. Replaces 4 separate frontend API calls.
+   */
+  @Get('homepage')
+  @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+  getHomepageData() {
+    return this.service.getHomepageData();
   }
 
   /** Admin-only — update a single key. */

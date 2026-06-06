@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Header } from '@nestjs/common';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { Public } from '../common/decorators/public.decorator';
@@ -11,12 +11,14 @@ export class CategoriesController {
 
   @Public()
   @Get()
+  @Header('Cache-Control', 'public, max-age=300, stale-while-revalidate=600')
   findAll() {
     return this.categories.findAll();
   }
 
   @Public()
   @Get(':slug')
+  @Header('Cache-Control', 'public, max-age=300, stale-while-revalidate=600')
   findOne(@Param('slug') slug: string) {
     return this.categories.findBySlug(slug);
   }
