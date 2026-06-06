@@ -119,9 +119,14 @@ export class EmailService {
 
   async sendOrderConfirmation(to: string, vars: {
     customer_name: string;
-    order_id: string;
+    order_id: string;       // order_number (e.g. KLK-xxx) — shown in email
+    order_db_id?: string;   // UUID — used for track/invoice links
     total: number; // paise
     items: Array<{ name: string; quantity: number; price: number }>; // price = line unit price in paise
+    address?: {
+      name?: string; line1?: string; line2?: string;
+      city?: string; state?: string; pincode?: string;
+    };
     // Optional GST receipt breakdown (all paise). When present, a full payment
     // receipt is shown and the tax invoice is attached.
     receipt?: {
@@ -171,6 +176,31 @@ export class EmailService {
       `
       : '';
 
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const backendUrl = this.config.get('BACKEND_URL') || 'https://api.kalokea.in';
+    const trackLink = vars.order_db_id
+      ? `${siteUrl}/account/orders`
+      : `${siteUrl}/account/orders`;
+    const invoiceLink = vars.order_db_id
+      ? `${backendUrl}/orders/${vars.order_db_id}/invoice`
+      : null;
+
+    const addr = vars.address;
+    const addressBlock = addr && (addr.line1 || addr.city)
+      ? `
+      <p style="margin:22px 0 6px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#9a9a9a;">Delivering to</p>
+      <p style="margin:0;font-size:13px;color:#6b6b6b;line-height:1.7;">
+        ${addr.name ? `<strong style="color:#0a0a0a;">${addr.name}</strong><br>` : ''}
+        ${addr.line1 || ''}${addr.line2 ? ', ' + addr.line2 : ''}<br>
+        ${[addr.city, addr.state].filter(Boolean).join(', ')}${addr.pincode ? ' - ' + addr.pincode : ''}
+      </p>
+      <p style="margin:10px 0 0;font-size:13px;color:#6b6b6b;">
+        Estimated delivery: <strong style="color:#0a0a0a;">3&ndash;5 business days</strong>
+      </p>`
+      : `<p style="margin:22px 0 0;font-size:13px;color:#6b6b6b;">
+        Estimated delivery: <strong style="color:#0a0a0a;">3&ndash;5 business days</strong>
+      </p>`;
+
     const body = `
       <p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         Hi ${vars.customer_name}, thank you for your order. Your booking is confirmed &mdash; we&rsquo;ll let you know as soon as it ships.${vars.invoice_html ? ' Your GST tax invoice is attached to this email.' : ''}
@@ -180,6 +210,23 @@ export class EmailService {
         <tbody>${rows}</tbody>
       </table>
       ${receiptBlock}
+      ${addressBlock}
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:24px;">
+        <tr>
+          <td style="padding-right:10px;">
+            <a href="${trackLink}"
+               style="display:inline-block;padding:11px 22px;background:#0a0a0a;font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;border-radius:4px;">
+              Track Your Order
+            </a>
+          </td>
+          ${invoiceLink ? `<td>
+            <a href="${invoiceLink}"
+               style="display:inline-block;padding:11px 22px;background:#faf8f5;border:1px solid #e8e4e0;font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#0a0a0a;text-decoration:none;border-radius:4px;">
+              View Invoice
+            </a>
+          </td>` : ''}
+        </tr>
+      </table>
     `;
     const html = this.layout({
       preheader: `Order #${vars.order_id} confirmed — ${this.money(vars.total)}`,
@@ -470,6 +517,44 @@ export class EmailService {
       footerNote: 'Once we receive the item, your refund will be processed within 5&ndash;7 business days.',
     });
     await this.send(to, `Return approved — #${vars.order_id}`, html);
+  }
+
+  // ── Order cancelled ────────────────────────────────────────────────────────
+
+  async sendOrderCancellation(to: string, vars: {
+    customer_name: string;
+    order_id: string;
+    total: number; // paise
+  }): Promise<void> {
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const body = `
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Hi ${vars.customer_name}, your order <strong style="color:#0a0a0a;">#${vars.order_id}</strong>
+        (${this.money(vars.total)}) has been successfully cancelled.
+      </p>
+      <p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        If you paid online, your refund will be processed within 5&ndash;7 business days to your original payment method.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
+        <tr><td style="border-radius:6px;background:#0a0a0a;">
+          <a href="${siteUrl}/shop"
+             style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
+            Continue Shopping
+          </a>
+        </td></tr>
+      </table>
+      <p style="margin:0;font-size:12px;line-height:1.6;color:#9a9a9a;">
+        If you didn&rsquo;t request this cancellation, please contact us immediately at support@kalokea.in.
+      </p>
+    `;
+    const html = this.layout({
+      preheader: `Order #${vars.order_id} has been cancelled`,
+      eyebrow: 'Order Cancelled',
+      heading: 'Your order has been cancelled',
+      body,
+      footerNote: 'We hope to see you again soon.',
+    });
+    await this.send(to, `Order cancelled — #${vars.order_id}`, html);
   }
 
   /** Forward a contact-form submission to the store's admin email. */

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, Res, UseGuards, ForbiddenException } from '@nestjs/common';
 import { Response } from 'express';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -56,6 +56,13 @@ export class OrdersController {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send('﻿' + csv); // UTF-8 BOM so Excel opens correctly
+  }
+
+  /** Cancel an order within the 12-hour window (authenticated user only). */
+  @Post(':id/cancel')
+  cancelOrder(@Param('id') id: string, @CurrentUser() user: any) {
+    if (!user?.id) throw new ForbiddenException('Login required');
+    return this.orders.cancelOrder(id, user.id);
   }
 
   @Get(':id/invoice')

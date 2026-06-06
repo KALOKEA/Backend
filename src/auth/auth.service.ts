@@ -107,10 +107,20 @@ export class AuthService {
     if (!user) {
       const { data: newUser } = await this.db.client
         .from('users')
-        .insert({ phone: dto.phone || null, email: dto.email || null })
+        .insert({
+          phone: dto.phone || null,
+          email: dto.email || null,
+          accepted_terms: dto.accepted_terms === true,
+        })
         .select()
         .single();
       user = newUser;
+    } else if (dto.accepted_terms === true && !existing.accepted_terms) {
+      // Retroactively record acceptance for existing users who tick the checkbox
+      await this.db.client
+        .from('users')
+        .update({ accepted_terms: true })
+        .eq('id', existing.id);
     }
 
     const access_token = this.jwt.sign({ sub: user.id, role: user.role }, { expiresIn: '15m' });

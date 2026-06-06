@@ -22,4 +22,19 @@ INSERT INTO homepage_content (key, value) VALUES
   ('hero_mode',       'image')
 ON CONFLICT (key) DO NOTHING;
 
+-- Migration 010 extension: Trust strip, newsletter, featured section heading
+INSERT INTO homepage_content (key, value) VALUES
+  ('trust_1_title', 'Free Delivery'),
+  ('trust_1_sub',   'On orders above ₹999'),
+  ('trust_2_title', 'Easy Returns'),
+  ('trust_2_sub',   '7-day hassle-free returns'),
+  ('trust_3_title', 'Secure Payments'),
+  ('trust_3_sub',   'Razorpay 256-bit encrypted'),
+  ('trust_4_title', 'Made in India'),
+  ('trust_4_sub',   'Proudly designed & sourced'),
+  ('newsletter_heading', 'Join the Kalokea Family'),
+  ('newsletter_subtext', 'Get early access to new arrivals, exclusive offers, and style inspiration straight to your inbox.'),
+  ('featured_section_heading', 'Featured Pieces')
+ON CONFLICT (key) DO NOTHING;
+
 GRANT ALL ON homepage_content TO service_role;

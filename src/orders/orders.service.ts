@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
 import { CouponsService } from '../coupons/coupons.service';
@@ -455,8 +455,17 @@ export class OrdersService {
       await this.email.sendOrderConfirmation(recipientEmail, {
         customer_name: order.company_name || addr.name || 'Customer',
         order_id: order.order_number,
+        order_db_id: order.id,
         total: Number(order.total) || 0,
         items,
+        address: {
+          name: addr.name,
+          line1: addr.line1 || addr.street,
+          line2: addr.line2,
+          city: addr.city,
+          state: addr.state,
+          pincode: addr.pincode,
+        },
         receipt: {
           subtotal: Number(order.subtotal) || 0,
           discount: Number(order.discount) || 0,
@@ -480,6 +489,103 @@ export class OrdersService {
       items_count: items.length,
       payment_method: order.payment_method === 'cod' ? 'COD' : 'Razorpay',
     });
+  }
+
+  /**
+   * Cancel an order within the 12-hour window.
+   * Rules:
+   *  - Only the order owner can cancel.
+   *  - Order must be in fulfillment_status = 'pending'.
+   *  - Order must have been placed within the last 12 hours.
+   *  - On cancel: restore stock, trigger Razorpay refund if payment_status = 'paid'.
+   */
+  async cancelOrder(id: string, userId: string): Promise<{ message: string }> {
+    const { data: order } = await this.db.client
+      .from('orders')
+      .select('*, order_items(*), users(email, name)')
+      .eq('id', id)
+      .single();
+
+    if (!order) throw new NotFoundException('Order not found');
+
+    // Ownership check
+    if (order.user_id !== userId) {
+      throw new ForbiddenException('Order not found');
+    }
+
+    // Status check
+    if (order.fulfillment_status !== 'pending' && order.status !== 'pending') {
+      throw new ForbiddenException(
+        'Cancellation window has closed. Orders can only be cancelled within 12 hours of placement.',
+      );
+    }
+
+    // 12-hour window check
+    const placedAt = new Date(order.created_at).getTime();
+    const twelveHoursMs = 12 * 60 * 60 * 1000;
+    if (Date.now() - placedAt > twelveHoursMs) {
+      throw new ForbiddenException(
+        'Cancellation window has closed. Orders can only be cancelled within 12 hours of placement.',
+      );
+    }
+
+    // Mark as cancelled
+    await this.db.client
+      .from('orders')
+      .update({ status: 'cancelled', fulfillment_status: 'cancelled' })
+      .eq('id', id);
+
+    // Restore stock for each item
+    const items: any[] = order.order_items || [];
+    for (const item of items) {
+      await this.db.client.rpc('restock_variant', {
+        p_variant_id: item.variant_id,
+        p_qty: item.quantity,
+      }).catch((e: any) => {
+        this.logger.warn(`Stock restore failed for variant ${item.variant_id}: ${e?.message}`);
+      });
+    }
+
+    // Trigger Razorpay refund if order was paid online
+    if (order.payment_status === 'paid' && order.payment_method !== 'cod' && order.razorpay_payment_id) {
+      const keyId = process.env.RAZORPAY_KEY_ID;
+      const keySecret = process.env.RAZORPAY_KEY_SECRET;
+      if (keyId && keySecret) {
+        const refundRes = await fetch(
+          `https://api.razorpay.com/v1/payments/${order.razorpay_payment_id}/refund`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
+            },
+            body: JSON.stringify({ amount: Math.round(order.total) }),
+          },
+        );
+        const refundResult: any = await refundRes.json();
+        if (!refundRes.ok) {
+          this.logger.error(`Razorpay refund failed on cancel: ${JSON.stringify(refundResult)}`);
+        } else {
+          await this.db.client
+            .from('orders')
+            .update({ payment_status: 'refunded' })
+            .eq('id', id);
+        }
+      }
+    }
+
+    // Send cancellation email
+    const recipientEmail = order.guest_email || (order.users as any)?.email;
+    const customerName = (order.users as any)?.name || (order.address_snapshot as any)?.name || 'Customer';
+    if (recipientEmail) {
+      await this.email.sendOrderCancellation(recipientEmail, {
+        customer_name: customerName,
+        order_id: order.order_number,
+        total: Number(order.total) || 0,
+      }).catch(() => {});
+    }
+
+    return { message: 'Order cancelled successfully' };
   }
 
   async findAll(userId?: string, page = 1, limit = 10) {
