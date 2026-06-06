@@ -253,8 +253,8 @@ export class OrdersService {
 
     // Use server cart if it has items; otherwise fall back to client-provided items.
     let cartItems = serverItems;
-    if (!cartItems.length && dto.client_items?.length) {
-      cartItems = await this.loadClientItems(dto.client_items) as any[];
+    if (!cartItems.length && dto.cart_items?.length) {
+      cartItems = await this.loadClientItems(dto.cart_items) as any[];
     }
     if (!cartItems.length) {
       throw new BadRequestException(

@@ -78,10 +78,9 @@ export class OrdersController {
    * Requires both order_number AND email to prove ownership.
    */
   @Public()
-  @Public()
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('guest/track')
   trackGuestOrder(@Body() body: { order_number: string; email: string }) {
-    return this.ordersService.trackGuestOrder(body.order_number, body.email);
+    return this.orders.trackGuestOrder(body.order_number, body.email);
   }
 }
