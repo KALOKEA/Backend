@@ -12,6 +12,7 @@ export interface StoreSettings {
   shipping_fee: number;           // paise
   shipping_free_threshold: number; // paise
   cod_fee: number;                 // paise
+  live_chat_widget: string;        // embed HTML/script for chat widget
 }
 
 const DEFAULTS: StoreSettings = {
@@ -24,6 +25,7 @@ const DEFAULTS: StoreSettings = {
   shipping_fee: 4900,
   shipping_free_threshold: 99900,
   cod_fee: 4900,
+  live_chat_widget: '',
 };
 
 @Injectable()

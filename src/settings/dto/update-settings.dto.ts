@@ -16,4 +16,7 @@ export class UpdateSettingsDto {
 
   /** COD surcharge in paise. Set 0 to disable. */
   @IsOptional() @IsNumber() @Min(0) cod_fee?: number;
+
+  /** Live chat widget embed script (Tawk.to / Crisp / WhatsApp). */
+  @IsOptional() @IsString() live_chat_widget?: string;
 }

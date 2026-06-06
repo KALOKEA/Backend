@@ -33,6 +33,7 @@ import { ContactModule } from './contact/contact.module';
 import { CronModule } from './cron/cron.module';
 import { HomepageContentModule } from './homepage-content/homepage-content.module';
 import { ShiprocketModule } from './shiprocket/shiprocket.module';
+import { CmsModule } from './cms/cms.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { validate } from './config/env.validation';
 
@@ -70,6 +71,7 @@ import { validate } from './config/env.validation';
     CronModule,
     HomepageContentModule,
     ShiprocketModule,
+    CmsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
