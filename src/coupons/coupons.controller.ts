@@ -5,7 +5,9 @@ import { ValidateCouponDto } from './dto/validate-coupon.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
+import { ApiTags } from '@nestjs/swagger';
 
+@ApiTags('coupons')
 @Controller('coupons')
 export class CouponsController {
   constructor(private coupons: CouponsService) {}

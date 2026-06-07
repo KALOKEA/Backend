@@ -3,7 +3,10 @@ import { HomepageContentService } from './homepage-content.service';
 import { UpdateContentDto } from './dto/update-content.dto';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('homepage-content')
+@ApiBearerAuth('access-token')
 @Controller()
 export class HomepageContentController {
   constructor(private service: HomepageContentService) {}

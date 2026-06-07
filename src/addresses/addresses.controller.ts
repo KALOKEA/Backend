@@ -2,7 +2,10 @@ import { Controller, Get, Post, Patch, Delete, Body, Param } from '@nestjs/commo
 import { AddressesService } from './addresses.service';
 import { CreateAddressDto } from './dto/create-address.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('addresses')
+@ApiBearerAuth('access-token')
 @Controller('addresses')
 export class AddressesController {
   constructor(private addresses: AddressesService) {}

@@ -2,7 +2,9 @@ import { Controller, Get, Res } from '@nestjs/common';
 import { Response } from 'express';
 import { FeedService } from './feed.service';
 import { Public } from '../common/decorators/public.decorator';
+import { ApiTags } from '@nestjs/swagger';
 
+@ApiTags('feed')
 @Controller('feed')
 export class FeedController {
   constructor(private feed: FeedService) {}

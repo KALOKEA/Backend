@@ -3,7 +3,10 @@ import { CmsService } from './cms.service';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('homepage-content')
+@ApiBearerAuth('access-token')
 @Controller('cms')
 export class CmsController {
   constructor(private cms: CmsService) {}

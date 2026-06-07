@@ -4,7 +4,10 @@ import { CreateExchangeDto } from './dto/create-exchange.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('exchanges')
+@ApiBearerAuth('access-token')
 @Controller('exchanges')
 export class ExchangesController {
   constructor(private exchanges: ExchangesService) {}

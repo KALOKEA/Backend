@@ -15,6 +15,7 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/schedule": "^4.0.0",
+    "@nestjs/swagger": "^7.0.0",
     "@nestjs/throttler": "^5.0.0",
     "@supabase/supabase-js": "^2.0.0",
     "@types/bcrypt": "^5.0.0",

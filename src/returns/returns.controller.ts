@@ -5,7 +5,10 @@ import { CreateReturnDto } from './dto/create-return.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('returns')
+@ApiBearerAuth('access-token')
 @Controller('returns')
 export class ReturnsController {
   constructor(private returns: ReturnsService) {}

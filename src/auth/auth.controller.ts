@@ -7,6 +7,7 @@ import { Request, Response } from 'express';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CsrfGuard } from '../common/guards/csrf.guard';
+import { ApiTags } from '@nestjs/swagger';
 
 /** Cookie settings shared by verify-otp and refresh. */
 const REFRESH_COOKIE = {
@@ -16,6 +17,7 @@ const REFRESH_COOKIE = {
   maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
 };
 
+@ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private auth: AuthService) {}

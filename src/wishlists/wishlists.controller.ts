@@ -1,7 +1,10 @@
 import { Controller, Get, Post, Delete, Param } from '@nestjs/common';
 import { WishlistsService } from './wishlists.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('wishlists')
+@ApiBearerAuth('access-token')
 @Controller('wishlists')
 export class WishlistsController {
   constructor(private wishlists: WishlistsService) {}

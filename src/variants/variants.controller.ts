@@ -5,7 +5,10 @@ import { UpdateVariantDto } from './dto/update-variant.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('variants')
+@ApiBearerAuth('access-token')
 @Controller('variants')
 export class VariantsController {
   constructor(private variants: VariantsService) {}

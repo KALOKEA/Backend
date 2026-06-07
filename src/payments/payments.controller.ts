@@ -8,7 +8,9 @@ import { AdminGuard } from '../common/guards/admin.guard';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Request } from 'express';
+import { ApiTags } from '@nestjs/swagger';
 
+@ApiTags('payments')
 @Controller('payments')
 export class PaymentsController {
   constructor(private payments: PaymentsService) {}

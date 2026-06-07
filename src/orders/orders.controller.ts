@@ -10,7 +10,9 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
+import { ApiTags } from '@nestjs/swagger';
 
+@ApiTags('orders')
 @Controller('orders')
 export class OrdersController {
   constructor(private orders: OrdersService) {}

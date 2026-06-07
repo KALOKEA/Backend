@@ -4,7 +4,10 @@ import { CreateBannerDto } from './dto/create-banner.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('banners')
+@ApiBearerAuth('access-token')
 @Controller('banners')
 export class BannersController {
   constructor(private banners: BannersService) {}

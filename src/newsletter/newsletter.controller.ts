@@ -6,7 +6,9 @@ import { SubscribeDto } from './dto/subscribe.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { UseGuards } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
 
+@ApiTags('newsletter')
 @Controller('newsletter')
 export class NewsletterController {
   constructor(private newsletter: NewsletterService) {}

@@ -5,6 +5,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 const MAX_SIZE_IMAGE = 5 * 1024 * 1024;   // 5 MB
 const MAX_SIZE_MEDIA = 30 * 1024 * 1024;  // 30 MB (covers short videos)
@@ -15,6 +16,8 @@ type UploadFolder = (typeof ALLOWED_FOLDERS)[number];
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
 const ALLOWED_MEDIA_TYPES = [...ALLOWED_IMAGE_TYPES, 'video/mp4', 'video/quicktime', 'video/webm'];
 
+@ApiTags('upload')
+@ApiBearerAuth('access-token')
 @Controller('upload')
 export class UploadController {
   constructor(private upload: UploadService) {}

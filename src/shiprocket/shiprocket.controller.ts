@@ -7,7 +7,10 @@ import { AdminGuard } from '../common/guards/admin.guard';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
 import { ShiprocketService } from './shiprocket.service';
 import { ConfigService } from '@nestjs/config';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
+@ApiTags('shiprocket')
+@ApiBearerAuth('access-token')
 @Controller('shiprocket')
 export class ShiprocketController {
   private readonly logger = new Logger(ShiprocketController.name);

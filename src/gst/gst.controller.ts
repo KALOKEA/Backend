@@ -2,8 +2,11 @@ import { Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { GstService } from './gst.service';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 @UseGuards(AdminGuard)
+@ApiTags('gst')
+@ApiBearerAuth('access-token')
 @Controller('gst')
 export class GstController {
   constructor(private gst: GstService) {}
