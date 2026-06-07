@@ -551,15 +551,24 @@ export class OrdersService {
       .delete()
       .eq('order_id', id);
 
-    // Restore stock for each item
-    const items: any[] = order.order_items || [];
-    for (const item of items) {
-      const { error: restockErr } = await this.db.client.rpc('restock_variant', {
-        p_variant_id: item.variant_id,
-        p_qty: item.quantity,
-      });
-      if (restockErr) {
-        this.logger.warn(`Stock restore failed for variant ${item.variant_id}: ${restockErr.message}`);
+    // Only restock if stock was actually committed:
+    // - COD orders: stock decremented at order creation time
+    // - Razorpay/online orders: stock decremented ONLY when payment.captured webhook fires
+    // An abandoned/unpaid Razorpay order that is cancelled must NOT call restock_variant
+    // because doing so inflates stock counts for inventory that was never decremented.
+    const stockWasDeducted =
+      order.payment_method === 'cod' || order.payment_status === 'paid';
+
+    if (stockWasDeducted) {
+      const items: any[] = order.order_items || [];
+      for (const item of items) {
+        const { error: restockErr } = await this.db.client.rpc('restock_variant', {
+          p_variant_id: item.variant_id,
+          p_qty: item.quantity,
+        });
+        if (restockErr) {
+          this.logger.warn(`Stock restore failed for variant ${item.variant_id}: ${restockErr.message}`);
+        }
       }
     }
 

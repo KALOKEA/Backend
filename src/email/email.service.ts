@@ -378,6 +378,11 @@ export class EmailService {
   }
 
   async sendNewsletterWelcome(to: string): Promise<void> {
+    const backendUrl = this.config.get('BACKEND_URL') || 'https://backend-production-73aa.up.railway.app';
+    // base64url-encode the email for the one-click unsubscribe link
+    const unsubToken = Buffer.from(to.trim().toLowerCase()).toString('base64url');
+    const unsubUrl = `${backendUrl}/newsletter/unsubscribe?t=${unsubToken}`;
+
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         Welcome to the Kalokea family. You&rsquo;ll be first to hear about new arrivals,
@@ -385,7 +390,7 @@ export class EmailService {
       </p>
       <table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 0;">
         <tr><td style="border-radius:6px;background:#0a0a0a;">
-          <a href="https://kalokea.pages.dev/shop" style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">Shop New Arrivals</a>
+          <a href="https://kalokea.in/shop" style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">Shop New Arrivals</a>
         </td></tr>
       </table>
     `;
@@ -394,7 +399,8 @@ export class EmailService {
       eyebrow: 'Welcome',
       heading: 'You&rsquo;re on the list',
       body,
-      footerNote: 'You can unsubscribe at any time.',
+      // Legally required unsubscribe link (CAN-SPAM / DPDP Act 2023)
+      footerNote: `Not interested? <a href="${unsubUrl}" style="color:#c8a4a5;text-decoration:underline;">Unsubscribe</a> at any time.`,
     });
     await this.send(to, 'Welcome to Kalokea', html, undefined, 'newsletter_welcome');
   }

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { GstService } from '../gst/gst.service';
 import { EmailService } from '../email/email.service';
@@ -13,6 +13,35 @@ export class ReturnsService {
   ) {}
 
   async create(dto: CreateReturnDto, userId: string) {
+    // SECURITY: Verify the order belongs to this user before accepting a return.
+    // Without this check, any authenticated user can file returns on other users' orders.
+    const { data: order } = await this.db.client
+      .from('orders')
+      .select('id, user_id, fulfillment_status, delivered_at, created_at')
+      .eq('id', dto.order_id)
+      .single();
+
+    if (!order) throw new NotFoundException('Order not found');
+
+    if (order.user_id !== userId) {
+      // Return same message as NotFoundException to avoid leaking order existence to attackers
+      throw new NotFoundException('Order not found');
+    }
+
+    // Return eligibility: order must be delivered
+    if (order.fulfillment_status !== 'delivered') {
+      throw new BadRequestException('Returns can only be filed for delivered orders');
+    }
+
+    // 7-day return window enforcement
+    const deliveredAt = order.delivered_at
+      ? new Date(order.delivered_at).getTime()
+      : new Date(order.created_at).getTime(); // fallback if delivered_at not set
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    if (Date.now() - deliveredAt > sevenDaysMs) {
+      throw new ForbiddenException('Return window has expired. Returns must be filed within 7 days of delivery.');
+    }
+
     const { data, error } = await this.db.client
       .from('returns')
       .insert({ ...dto, user_id: userId, status: 'requested' })
