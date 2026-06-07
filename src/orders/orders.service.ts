@@ -172,7 +172,7 @@ export class OrdersService {
     const { cgst, sgst, igst } = this.gst.splitTax(gstTotal, intraState);
     // Read shipping/COD from admin settings (falls back to compile-time constants
     // if the migration 007 hasn't been run yet).
-    const storeSettings = await this.settings.get().catch(() => null);
+    const storeSettings = await this.settings.get().catch((): null => null);
     const freeThreshold = storeSettings?.shipping_free_threshold ?? SHIPPING_FREE_THRESHOLD;
     const shippingFee   = storeSettings?.shipping_fee ?? SHIPPING_FEE;
     const codFeeAmount  = storeSettings?.cod_fee ?? COD_FEE;
