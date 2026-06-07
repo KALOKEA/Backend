@@ -22,9 +22,12 @@ async function bootstrap() {
   app.use(cookieParser());
 
   // ALLOWED_ORIGINS (Railway env var) must include ALL frontend origins:
-  // https://kalokea.in, https://www.kalokea.in, https://kalokea.pages.dev
-  // .trim() prevents accidental whitespace (e.g. "https://kalokea.in, https://...")
-  // from producing origins that never match. filter(Boolean) drops empty entries.
+  // https://kalokea.in,https://www.kalokea.in
+  // Add https://kalokea.pages.dev during transition if Cloudflare redirect is still active.
+  // .trim() prevents accidental whitespace from producing origins that never match.
+  // filter(Boolean) drops empty entries.
+  //
+  // SECURITY: Set SWAGGER_DISABLED=true in Railway to hide /api/docs in production.
   const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
     .split(',')
     .map((s) => s.trim())
