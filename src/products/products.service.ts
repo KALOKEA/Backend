@@ -94,6 +94,22 @@ export class ProductsService {
     };
   }
 
+  async findByIds(ids: string[]) {
+    if (!ids.length) return [];
+    const { data, error } = await this.db.client
+      .from('products')
+      .select(`
+        *,
+        categories(id, name, slug),
+        product_images(url, alt_text, is_primary, sort_order),
+        product_variants(id, size, colour, price, stock, sku, is_active)
+      `)
+      .in('id', ids)
+      .eq('is_active', true);
+    if (error) throw error;
+    return data || [];
+  }
+
   async findBySlug(slug: string) {
     const { data, error } = await this.db.client
       .from('products')

@@ -59,6 +59,16 @@ export class ProductsController {
     return this.products.deleteImage(imageId);
   }
 
+  // Must be declared before ':slug' so the literal segment 'by-ids' is never
+  // treated as a slug. Accepts ?ids=id1,id2,... (max 50) — used by the wishlist page.
+  @Public()
+  @Get('by-ids')
+  @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+  findByIds(@Query('ids') ids: string) {
+    const idList = (ids || '').split(',').map((s) => s.trim()).filter(Boolean).slice(0, 50);
+    return this.products.findByIds(idList);
+  }
+
   @Public()
   @Get(':slug')
   @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
