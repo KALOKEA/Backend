@@ -209,12 +209,12 @@ export class PaymentsService {
       }
 
       // Confirm soft reservations.
-      this.db.client
+      // Use two-arg .then() because Supabase returns PromiseLike (no .catch()).
+      void this.db.client
         .from('stock_reservations')
         .update({ confirmed: true })
         .eq('order_id', order.id)
-        .then(() => {})
-        .catch(() => {});
+        .then(() => {}, () => {});
     }
 
     return { verified: true };
