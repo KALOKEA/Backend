@@ -5,24 +5,43 @@ import { AdminGuard } from '../common/guards/admin.guard';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
-@UseGuards(AdminGuard)
 @ApiTags('admin')
-@ApiBearerAuth('access-token')
 @Controller('settings')
 export class SettingsController {
   constructor(private settings: SettingsService) {}
 
+  /**
+   * Public endpoint — safe fields only (no admin email, no GST internals).
+   * Used by the frontend footer to fetch live social / brand links without auth.
+   */
+  @Get('public')
+  async getPublic() {
+    const s = await this.settings.get();
+    return {
+      footer_instagram_url: s.footer_instagram_url,
+      footer_whatsapp_url:  s.footer_whatsapp_url,
+      seller_gstin:         s.seller_gstin,
+      seller_name:          s.seller_name,
+    };
+  }
+
+  @UseGuards(AdminGuard)
+  @ApiBearerAuth('access-token')
   @Get()
   get() {
     return this.settings.get();
   }
 
+  @UseGuards(AdminGuard)
+  @ApiBearerAuth('access-token')
   @AdminAction('settings.update')
   @Put()
   update(@Body() dto: UpdateSettingsDto) {
     return this.settings.update(dto);
   }
 
+  @UseGuards(AdminGuard)
+  @ApiBearerAuth('access-token')
   @Get('gst-report')
   gstReport(@Query('month') month?: string) {
     return this.settings.gstReport(month);

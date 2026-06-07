@@ -22,4 +22,8 @@ export class UpdateSettingsDto {
 
   /** Low stock alert threshold — notify admin when product stock drops below this. */
   @IsOptional() @IsNumber() @Min(1) @Max(100) low_stock_threshold?: number;
+
+  /** Footer social / brand links — editable from admin without a code deploy. */
+  @IsOptional() @IsString() footer_instagram_url?: string;
+  @IsOptional() @IsString() footer_whatsapp_url?: string;
 }
