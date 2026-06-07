@@ -22,7 +22,12 @@ async function bootstrap() {
 
   // ALLOWED_ORIGINS (Railway env var) must include ALL frontend origins:
   // https://kalokea.in, https://www.kalokea.in, https://kalokea.pages.dev
-  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',');
+  // .trim() prevents accidental whitespace (e.g. "https://kalokea.in, https://...")
+  // from producing origins that never match. filter(Boolean) drops empty entries.
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   app.enableCors({
     origin: (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       if (!origin || allowedOrigins.includes(origin)) {

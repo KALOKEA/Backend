@@ -400,7 +400,8 @@ export class OrdersService {
     }
 
     if (appliedCoupon) {
-      await this.coupons.redeem(appliedCoupon.id, order.id, userId);
+      // Pass guest_email so per-user cap enforcement works for guest checkout.
+      await this.coupons.redeem(appliedCoupon.id, order.id, userId, dto.guest_email);
     }
 
     // COD is a committed sale → confirmation + receipt + invoice email and GST
@@ -604,22 +605,27 @@ export class OrdersService {
     return { message: 'Order cancelled successfully' };
   }
 
-  async findAll(userId?: string, page = 1, limit = 10) {
+  async findAll(userId?: string, page = 1, limit = 10, status?: string) {
     const from = (page - 1) * limit;
+    // Admin fetch joins users so the order list can show customer names/emails.
+    const selectCols = userId
+      ? '*, order_items(*)'
+      : '*, order_items(*), users(name, email)';
     let q = this.db.client
       .from('orders')
-      .select('*, order_items(*)', { count: 'exact' })
+      .select(selectCols, { count: 'exact' })
       .order('created_at', { ascending: false })
       .range(from, from + limit - 1);
 
     if (userId) q = q.eq('user_id', userId);
+    if (status) q = q.eq('status', status);
 
     const { data, error, count } = await q;
     if (error) throw error;
     return { data, meta: { total: count, page, limit } };
   }
 
-  async findOne(id: string, user?: { id: string; role: string }) {
+  async findOne(id: string, user?: { id: string; role: string }, guestEmail?: string) {
     const { data, error } = await this.db.client
       .from('orders')
       .select('*, order_items(*)')
@@ -628,7 +634,13 @@ export class OrdersService {
     if (error || !data) throw new NotFoundException('Order not found');
 
     const isAdmin = user?.role === 'admin';
-    if (!isAdmin && data.user_id !== user?.id) {
+    const isOwner = user?.id && data.user_id === user.id;
+    const isGuestOwner =
+      guestEmail &&
+      data.guest_email &&
+      data.guest_email.toLowerCase() === guestEmail.toLowerCase();
+
+    if (!isAdmin && !isOwner && !isGuestOwner) {
       throw new NotFoundException('Order not found');
     }
     return data;

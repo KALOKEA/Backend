@@ -1,8 +1,12 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
-@UseGuards(AdminGuard)
+// Explicit dual-guard: JwtAuthGuard runs first (validates + attaches user),
+// then AdminGuard checks user.role === 'admin'. Belt-and-suspenders over the
+// global JwtAuthGuard — prevents accidental exposure if global guard config changes.
+@UseGuards(JwtAuthGuard, AdminGuard)
 @Controller('admin')
 export class AdminController {
   constructor(private admin: AdminService) {}

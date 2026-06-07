@@ -175,11 +175,57 @@ export class PaymentsService {
       throw new BadRequestException('Payment verification failed. Please contact support.');
     }
 
+    // Signature is valid — flip the order to paid as a fallback for when the
+    // Razorpay webhook is delayed or never arrives (network partition, mis-config).
+    // The webhook handler is idempotent (checks payment_status !== 'paid'), so
+    // a subsequent webhook delivery after this runs is safe and a no-op.
+    const { data: order } = await this.db.client
+      .from('orders')
+      .select('id, order_number, payment_status, order_items(variant_id, quantity)')
+      .eq('razorpay_order_id', dto.razorpay_order_id)
+      .maybeSingle();
+
+    if (order && order.payment_status !== 'paid') {
+      await this.db.client.from('orders').update({
+        payment_status: 'paid',
+        status: 'confirmed',
+        razorpay_payment_id: dto.razorpay_payment_id,
+      }).eq('id', order.id);
+
+      // Post GST ledger entry for this sale.
+      await this.gst.postSaleLedger(order.id).catch((e) =>
+        this.logger.warn(`GST ledger fallback failed for ${order.id}: ${e.message}`),
+      );
+
+      // Deduct stock (same guard as webhook — if short, log for manual review).
+      for (const item of (order.order_items as any[]) || []) {
+        const { data: ok } = await this.db.client.rpc('decrement_stock', {
+          p_variant_id: item.variant_id,
+          p_qty: item.quantity,
+        });
+        if (ok !== true) {
+          this.logger.warn(`Stock shortfall (verifyPayment fallback) for variant ${item.variant_id} on order ${order.order_number}`);
+        }
+      }
+
+      // Confirm soft reservations.
+      this.db.client
+        .from('stock_reservations')
+        .update({ confirmed: true })
+        .eq('order_id', order.id)
+        .then(() => {})
+        .catch(() => {});
+    }
+
     return { verified: true };
   }
 
   async handleWebhook(req: RawBodyRequest<Request>) {
-    const webhookSecret = this.config.get('RAZORPAY_WEBHOOK_SECRET');
+    const webhookSecret = this.config.get<string>('RAZORPAY_WEBHOOK_SECRET');
+    if (!webhookSecret) {
+      this.logger.error('RAZORPAY_WEBHOOK_SECRET is not set — rejecting webhook');
+      throw new BadRequestException('Webhook not configured');
+    }
     const signature = req.headers['x-razorpay-signature'] as string;
     const rawBody = req.rawBody;
 

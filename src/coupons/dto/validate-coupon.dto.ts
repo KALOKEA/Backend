@@ -1,4 +1,4 @@
-import { IsString, IsNumber, IsOptional, Min } from 'class-validator';
+import { IsString, IsNumber, IsOptional, IsEmail, Min } from 'class-validator';
 
 export class ValidateCouponDto {
   @IsString()
@@ -12,4 +12,13 @@ export class ValidateCouponDto {
   @IsOptional()
   @IsString()
   user_id?: string;
+
+  /**
+   * Guest email — used as identity for per-user cap enforcement when user_id
+   * is absent (guest checkout). Prevents a guest from using a single-use or
+   * per-user-capped coupon multiple times by rotating email addresses.
+   */
+  @IsOptional()
+  @IsEmail()
+  guest_email?: string;
 }

@@ -22,18 +22,34 @@ export class CouponsService {
     if (coupon.max_uses && coupon.used_count >= coupon.max_uses)
       throw new BadRequestException('Coupon usage limit reached');
 
-    // Per-user cap check: count how many times this user has already redeemed
-    // this coupon. Only enforced when max_per_user is set and user_id is known.
-    if (coupon.max_per_user && dto.user_id) {
-      const { count } = await this.db.client
-        .from('coupon_uses')
-        .select('id', { count: 'exact', head: true })
-        .eq('coupon_id', coupon.id)
-        .eq('user_id', dto.user_id);
-      if ((count ?? 0) >= coupon.max_per_user) {
-        throw new BadRequestException(
-          `This coupon can only be used ${coupon.max_per_user} time${coupon.max_per_user === 1 ? '' : 's'} per customer`,
-        );
+    // Per-user cap check: enforce max_per_user for both logged-in users and guests.
+    // Guests are identified by guest_email so "first order only" coupons can't
+    // be replayed by repeatedly checking out without an account.
+    if (coupon.max_per_user) {
+      if (dto.user_id) {
+        const { count } = await this.db.client
+          .from('coupon_uses')
+          .select('id', { count: 'exact', head: true })
+          .eq('coupon_id', coupon.id)
+          .eq('user_id', dto.user_id);
+        if ((count ?? 0) >= coupon.max_per_user) {
+          throw new BadRequestException(
+            `This coupon can only be used ${coupon.max_per_user} time${coupon.max_per_user === 1 ? '' : 's'} per customer`,
+          );
+        }
+      } else if (dto.guest_email) {
+        // Guest path: check usage by email. Not bullet-proof (guests can change
+        // email) but it closes the trivial bot exploit for per-user-capped promos.
+        const { count } = await this.db.client
+          .from('coupon_uses')
+          .select('id', { count: 'exact', head: true })
+          .eq('coupon_id', coupon.id)
+          .eq('guest_email', dto.guest_email.toLowerCase());
+        if ((count ?? 0) >= coupon.max_per_user) {
+          throw new BadRequestException(
+            `This coupon can only be used ${coupon.max_per_user} time${coupon.max_per_user === 1 ? '' : 's'} per customer`,
+          );
+        }
       }
     }
 
@@ -60,11 +76,12 @@ export class CouponsService {
   // Record a redemption once an order using this coupon is placed. Atomic:
   // redeem_coupon bumps used_count only if still under max_uses and records the
   // use in one statement, so two concurrent orders can't exceed the limit.
-  async redeem(couponId: string, orderId: string, userId?: string) {
+  async redeem(couponId: string, orderId: string, userId?: string, guestEmail?: string) {
     const { data: ok, error } = await this.db.client.rpc('redeem_coupon', {
       p_coupon_id: couponId,
       p_order_id: orderId,
       p_user_id: userId || null,
+      p_guest_email: guestEmail ? guestEmail.toLowerCase() : null,
     });
     // The order is already placed; if the limit was hit in a race we can't undo
     // the discount, but we log it so it can be reconciled. used_count stays correct.

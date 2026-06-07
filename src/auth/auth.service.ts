@@ -124,7 +124,13 @@ export class AuthService {
         .eq('id', existing.id);
     }
 
-    const access_token = this.jwt.sign({ sub: user.id, role: user.role }, { expiresIn: '7d' });
+    // 15-minute access token — short-lived so a stolen token expires quickly.
+    // tv (token_version) is embedded so JwtStrategy can detect revocation even
+    // within the 15-minute window (logout / suspicious activity bumps tv).
+    const access_token = this.jwt.sign(
+      { sub: user.id, role: user.role, tv: user.token_version ?? 0 },
+      { expiresIn: '15m' },
+    );
     // Refresh token carries the user's token_version; bumping that column
     // (logout / revoke) invalidates every outstanding refresh token.
     const refresh_token = this.jwt.sign(
@@ -174,8 +180,8 @@ export class AuthService {
     // Use the fresh DB role so a role change (e.g. promotion to admin) takes
     // effect on the next refresh without forcing a full re-login.
     const access_token = this.jwt.sign(
-      { sub: payload.sub, role: user.role },
-      { expiresIn: '7d' },
+      { sub: payload.sub, role: user.role, tv: nextVersion },
+      { expiresIn: '15m' },
     );
     const refresh_token = this.jwt.sign(
       { sub: payload.sub, role: user.role, tv: nextVersion },

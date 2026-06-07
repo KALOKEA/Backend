@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, Res, UseGuards, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, Res, UseGuards, ForbiddenException } from '@nestjs/common';
 import { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { OrdersService } from './orders.service';
@@ -6,6 +6,7 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
@@ -44,6 +45,20 @@ export class OrdersController {
     return this.orders.findAll(user.id, +page, +limit);
   }
 
+  /**
+   * Admin: list ALL orders with pagination + optional status filter.
+   * Static route — MUST be declared before :id to avoid route ambiguity.
+   */
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @Get()
+  listAllOrders(
+    @Query('page') page = '1',
+    @Query('limit') limit = '20',
+    @Query('status') status?: string,
+  ) {
+    return this.orders.findAll(undefined, +page, +limit, status);
+  }
+
   /** Admin: export all orders as CSV. Static route MUST be declared before :id. */
   @UseGuards(AdminGuard)
   @Get('export')
@@ -68,11 +83,6 @@ export class OrdersController {
   }
 
   /**
-   * Printable tax invoice. Authenticated users must own the order. Guests access
-   * via ?guest_email=<email> — the email must match order.guest_email. Both checks
-   * are enforced inside getInvoice() after loading the order.
-   */
-  /**
    * Guest order status lookup — public endpoint.
    * Returns minimal order info (status, items, total) for guest tracking page.
    * Requires both order_number AND email to prove ownership.
@@ -82,5 +92,56 @@ export class OrdersController {
   @Post('guest/track')
   trackGuestOrder(@Body() body: { order_number: string; email: string }) {
     return this.orders.trackGuestOrder(body.order_number, body.email);
+  }
+
+  /**
+   * Get a single order. Authenticated users must own the order (admin can see
+   * all). Guests pass ?guest_email= — the service enforces email ownership.
+   * Declared AFTER all static-segment routes (my, export, guest/track) so the
+   * :id segment never shadows them.
+   */
+  @Public()
+  @UseGuards(OptionalJwtAuthGuard)
+  @Get(':id')
+  findOne(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Query('guest_email') guestEmail?: string,
+  ) {
+    return this.orders.findOne(id, user, guestEmail);
+  }
+
+  /**
+   * Admin: update order status (shipped, delivered, cancelled, etc.).
+   * Triggers customer email for each status transition.
+   */
+  @UseGuards(JwtAuthGuard, AdminGuard)
+  @AdminAction('order.status_change')
+  @Patch(':id/status')
+  updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdateOrderStatusDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.orders.updateStatus(id, dto, user?.email);
+  }
+
+  /**
+   * Printable tax invoice / booking confirmation HTML.
+   * Authenticated users must own the order. Guests pass ?guest_email=<email>.
+   * Returns full HTML page — set as iframe src or window.open target.
+   */
+  @Public()
+  @UseGuards(OptionalJwtAuthGuard)
+  @Get(':id/invoice')
+  async getInvoice(
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Query('guest_email') guestEmail: string,
+    @Res() res: Response,
+  ) {
+    const html = await this.orders.getInvoice(id, user, guestEmail);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
   }
 }
