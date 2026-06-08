@@ -55,4 +55,8 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   video_url?: string;
+
+  @IsOptional()
+  @IsNumber()
+  sort_weight?: number;
 }

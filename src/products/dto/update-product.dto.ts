@@ -15,4 +15,5 @@ export class UpdateProductDto {
   @IsOptional() @IsString()  hsn_code?: string;
   @IsOptional() @IsNumber()  gst_rate?: number;
   @IsOptional() @IsString()  video_url?: string;
+  @IsOptional() @IsNumber()  sort_weight?: number;
 }

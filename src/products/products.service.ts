@@ -78,6 +78,10 @@ export class ProductsService {
     if (query.sort === 'price_asc') q = q.order('base_price', { ascending: true });
     else if (query.sort === 'price_desc') q = q.order('base_price', { ascending: false });
     else if (query.sort === 'newest') q = q.order('created_at', { ascending: false });
+    else if (query.sort === 'bestseller') {
+      // Products with sort_weight > 0 (admin-promoted) appear first, then newest
+      q = q.order('sort_weight', { ascending: false }).order('created_at', { ascending: false });
+    }
     else q = q.order('created_at', { ascending: false });
 
     const { data, error, count } = await q;
