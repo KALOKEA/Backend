@@ -180,12 +180,20 @@ export class ProductsService {
    * test/draft products that have never had orders.
    */
   async hardDelete(id: string) {
-    // Check no paid orders reference this product via order_items.
-    const { count } = await this.db.client
-      .from('order_items')
-      .select('id', { count: 'exact', head: true })
-      .eq('product_id', id);
-    if (count && count > 0) {
+    // Check no paid orders reference this product's variants via order_items.
+    // order_items has no product_id — join via product_variants instead.
+    const { data: variants } = await this.db.client
+      .from('product_variants').select('id').eq('product_id', id);
+    const variantIds = (variants || []).map((v: any) => v.id);
+    let hasOrders = false;
+    if (variantIds.length) {
+      const { count } = await this.db.client
+        .from('order_items')
+        .select('id', { count: 'exact', head: true })
+        .in('variant_id', variantIds);
+      hasOrders = (count ?? 0) > 0;
+    }
+    if (hasOrders) {
       throw new BadRequestException(
         'Cannot permanently delete a product that has order history. Deactivate it instead.',
       );

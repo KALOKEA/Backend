@@ -905,7 +905,7 @@ export class OrdersService {
       .from('orders')
       .select(`
         id, order_number, status, payment_status, payment_method,
-        total, taxable_value, total_gst, shipping_fee,
+        total, taxable_value, total_gst, shipping,
         coupon_code, discount,
         address_snapshot, company_name, gstin,
         created_at,

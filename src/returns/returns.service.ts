@@ -33,13 +33,13 @@ export class ReturnsService {
       throw new BadRequestException('Returns can only be filed for delivered orders');
     }
 
-    // 7-day return window enforcement
+    // 15-day return window enforcement (matches all storefront policy pages)
     const deliveredAt = order.delivered_at
       ? new Date(order.delivered_at).getTime()
       : new Date(order.created_at).getTime(); // fallback if delivered_at not set
-    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-    if (Date.now() - deliveredAt > sevenDaysMs) {
-      throw new ForbiddenException('Return window has expired. Returns must be filed within 7 days of delivery.');
+    const fifteenDaysMs = 15 * 24 * 60 * 60 * 1000;
+    if (Date.now() - deliveredAt > fifteenDaysMs) {
+      throw new ForbiddenException('Return window has expired. Returns must be filed within 15 days of delivery.');
     }
 
     const { data, error } = await this.db.client

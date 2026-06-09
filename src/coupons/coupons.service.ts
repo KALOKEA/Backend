@@ -54,7 +54,7 @@ export class CouponsService {
     }
 
     if (dto.order_value < coupon.min_order_value)
-      throw new BadRequestException(`Minimum order value ₹${coupon.min_order_value} required`);
+      throw new BadRequestException(`Minimum order value ₹${Math.round(coupon.min_order_value / 100)} required`);
 
     const rawDiscount = coupon.type === 'percent'
       ? Math.round((dto.order_value * coupon.value) / 100)
