@@ -16,7 +16,7 @@ export class FeedService {
 
   /** Google Merchant Center product feed (RSS 2.0 + g: namespace). */
   async googleFeed(): Promise<string> {
-    const site = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const site = this.config.get('SITE_URL') || 'https://kalokea.in';
 
     const { data: products } = await this.db.client
       .from('products')

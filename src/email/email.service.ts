@@ -222,7 +222,7 @@ export class EmailService {
       `
       : '';
 
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
     const backendUrl = this.config.get('BACKEND_URL') || 'https://api.kalokea.in';
     const trackLink = `${siteUrl}/account/orders/`;
     const invoiceLink = vars.order_db_id
@@ -376,7 +376,7 @@ export class EmailService {
   }
 
   async sendNewsletterWelcome(to: string): Promise<void> {
-    const backendUrl = this.config.get('BACKEND_URL') || 'https://backend-production-73aa.up.railway.app';
+    const backendUrl = this.config.get('BACKEND_URL') || 'https://api.kalokea.in';
     // base64url-encode the email for the one-click unsubscribe link
     const unsubToken = Buffer.from(to.trim().toLowerCase()).toString('base64url');
     const unsubUrl = `${backendUrl}/newsletter/unsubscribe?t=${unsubToken}`;
@@ -423,7 +423,7 @@ export class EmailService {
     order_id: string;
     amount: number; // paise
   }): Promise<void> {
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         Hi ${vars.customer_name}, unfortunately your payment of
@@ -459,7 +459,7 @@ export class EmailService {
     order_id: string;
     order_db_id: string; // UUID for the review link
   }): Promise<void> {
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         Hi ${vars.customer_name}, your order <strong style="color:#0a0a0a;">#${vars.order_id}</strong>
@@ -496,7 +496,7 @@ export class EmailService {
     product_name: string;
     product_slug: string;
   }): Promise<void> {
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         Hi ${vars.customer_name}, your review for
@@ -531,7 +531,7 @@ export class EmailService {
     order_id: string;
     instructions?: string;
   }): Promise<void> {
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         Hi ${vars.customer_name}, your return request for order
@@ -576,7 +576,7 @@ export class EmailService {
     order_id: string;
     total: number; // paise
   }): Promise<void> {
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         Hi ${vars.customer_name}, your order <strong style="color:#0a0a0a;">#${vars.order_id}</strong>
@@ -703,7 +703,7 @@ export class EmailService {
     order_id: string;
     reason?: string;
   }): Promise<void> {
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         Hi ${vars.customer_name}, unfortunately we are unable to approve your return request
@@ -745,7 +745,7 @@ export class EmailService {
     customer_name: string;
     order_id: string;
   }): Promise<void> {
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         Hi ${vars.customer_name}, great news — your order
