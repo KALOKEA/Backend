@@ -25,7 +25,8 @@ export class CategoriesController {
     return this.categories.findBySlug(slug);
   }
 
-  @Public()
+  @UseGuards(AdminGuard)
+  @AdminAction('category.seed')
   @Post('seed')
   seed() {
     return this.categories.seed();

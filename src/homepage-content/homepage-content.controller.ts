@@ -3,6 +3,7 @@ import { HomepageContentService } from './homepage-content.service';
 import { UpdateContentDto } from './dto/update-content.dto';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('homepage-content')
@@ -12,6 +13,7 @@ export class HomepageContentController {
   constructor(private service: HomepageContentService) {}
 
   /** Public — fetched by the frontend at build/load time. */
+  @Public()
   @Get('homepage-content')
   @Header('Cache-Control', 'public, max-age=300, stale-while-revalidate=600')
   getAll() {
@@ -22,6 +24,7 @@ export class HomepageContentController {
    * Aggregated homepage endpoint — CMS + categories + 8 newest products in one
    * request. Replaces 4 separate frontend API calls.
    */
+  @Public()
   @Get('homepage')
   @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
   getHomepageData() {

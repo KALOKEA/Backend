@@ -16,6 +16,9 @@ export interface StoreSettings {
   low_stock_threshold: number;     // alert when stock drops below this
   footer_instagram_url: string;
   footer_whatsapp_url: string;
+  // Added in migration 023 — social links shown in the footer
+  footer_facebook_url: string;
+  footer_pinterest_url: string;
 }
 
 const DEFAULTS: StoreSettings = {
@@ -32,6 +35,8 @@ const DEFAULTS: StoreSettings = {
   low_stock_threshold: 5,
   footer_instagram_url: 'https://www.instagram.com/kalokea.in',
   footer_whatsapp_url: 'https://wa.me/919999999999',
+  footer_facebook_url: 'https://www.facebook.com/kalokea.in',
+  footer_pinterest_url: 'https://www.pinterest.com/kalokea',
 };
 
 @Injectable()

@@ -3,6 +3,7 @@ import { SettingsService } from './settings.service';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('admin')
@@ -14,14 +15,18 @@ export class SettingsController {
    * Public endpoint — safe fields only (no admin email, no GST internals).
    * Used by the frontend footer to fetch live social / brand links without auth.
    */
+  @Public()
   @Get('public')
   async getPublic() {
     const s = await this.settings.get();
     return {
-      footer_instagram_url: s.footer_instagram_url,
-      footer_whatsapp_url:  s.footer_whatsapp_url,
-      seller_gstin:         s.seller_gstin,
-      seller_name:          s.seller_name,
+      footer_instagram_url:  s.footer_instagram_url,
+      footer_whatsapp_url:   s.footer_whatsapp_url,
+      footer_facebook_url:   s.footer_facebook_url,
+      footer_pinterest_url:  s.footer_pinterest_url,
+      live_chat_widget:      s.live_chat_widget,
+      seller_gstin:          s.seller_gstin,
+      seller_name:           s.seller_name,
     };
   }
 

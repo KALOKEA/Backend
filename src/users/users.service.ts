@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 
@@ -127,7 +127,7 @@ export class UsersService {
   /** Admin: create a new user record (e.g. add another admin account). */
   async adminCreate(dto: { name?: string; email?: string; phone?: string; role?: string }) {
     if (!dto.email && !dto.phone) {
-      throw new Error('Email or phone is required');
+      throw new BadRequestException('Email or phone is required');
     }
     const { data, error } = await this.db.client
       .from('users')
@@ -139,7 +139,7 @@ export class UsersService {
       })
       .select('id, name, email, phone, role, created_at')
       .single();
-    if (error) throw new Error(error.message);
+    if (error) throw new BadRequestException(error.message);
     return data;
   }
 
@@ -155,10 +155,10 @@ export class UsersService {
       .select('id', { count: 'exact', head: true })
       .eq('user_id', id);
     if (count && count > 0) {
-      throw new Error('Cannot delete a customer with order history. Change their role to "banned" instead.');
+      throw new BadRequestException('Cannot delete a customer with order history. Change their role to "banned" instead.');
     }
     const { error } = await this.db.client.from('users').delete().eq('id', id);
-    if (error) throw new Error(error.message || 'Delete failed');
+    if (error) throw new BadRequestException(error.message || 'Delete failed');
     return { message: 'User deleted' };
   }
 

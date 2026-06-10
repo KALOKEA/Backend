@@ -107,6 +107,7 @@ export class CartService {
 
   async clearCart(userId?: string, sessionId?: string) {
     const cart = await this.getOrCreateCart(userId, sessionId);
+    if (!cart) return { message: 'Cart cleared' };
     await this.db.client.from('cart_items').delete().eq('cart_id', cart.id);
     return { message: 'Cart cleared' };
   }

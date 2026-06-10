@@ -309,7 +309,7 @@ export class PaymentsService {
         .from('orders')
         .update({ payment_status: 'failed' })
         .eq('razorpay_order_id', payment.order_id)
-        .select('id, order_number, total, users(email, name)')
+        .select('id, order_number, total, guest_email, users(email, name)')
         .single();
 
       // Release soft-reservations so other buyers can purchase the items.
@@ -323,7 +323,8 @@ export class PaymentsService {
       }
 
       if (failedOrder) {
-        const userEmail = (failedOrder.users as any)?.email;
+        // Notify both logged-in users AND guests (guest_email was missing — GE-1).
+        const userEmail = (failedOrder.users as any)?.email || failedOrder.guest_email;
         if (userEmail) {
           await this.email.sendPaymentFailed(userEmail, {
             customer_name: (failedOrder.users as any)?.name || 'Customer',

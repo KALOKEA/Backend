@@ -26,4 +26,6 @@ export class UpdateSettingsDto {
   /** Footer social / brand links — editable from admin without a code deploy. */
   @IsOptional() @IsString() footer_instagram_url?: string;
   @IsOptional() @IsString() footer_whatsapp_url?: string;
+  @IsOptional() @IsString() footer_facebook_url?: string;
+  @IsOptional() @IsString() footer_pinterest_url?: string;
 }

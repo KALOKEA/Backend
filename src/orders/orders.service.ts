@@ -522,8 +522,10 @@ export class OrdersService {
       throw new ForbiddenException('Order not found');
     }
 
-    // Status check
-    if (order.fulfillment_status !== 'pending' && order.status !== 'pending') {
+    // Status check: block if EITHER status has progressed past pending.
+    // (Using && was a bug — a shipped order could bypass the guard if one field
+    // hadn't been updated yet.)
+    if (order.fulfillment_status !== 'pending' || order.status !== 'pending') {
       throw new ForbiddenException(
         'Cancellation window has closed. Orders can only be cancelled within 12 hours of placement.',
       );

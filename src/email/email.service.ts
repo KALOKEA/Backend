@@ -224,9 +224,7 @@ export class EmailService {
 
     const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.pages.dev';
     const backendUrl = this.config.get('BACKEND_URL') || 'https://api.kalokea.in';
-    const trackLink = vars.order_db_id
-      ? `${siteUrl}/account/orders`
-      : `${siteUrl}/account/orders`;
+    const trackLink = `${siteUrl}/account/orders/`;
     const invoiceLink = vars.order_db_id
       ? `${backendUrl}/orders/${vars.order_db_id}/invoice`
       : null;
@@ -390,7 +388,7 @@ export class EmailService {
       </p>
       <table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 0;">
         <tr><td style="border-radius:6px;background:#0a0a0a;">
-          <a href="https://kalokea.in/shop" style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">Shop New Arrivals</a>
+          <a href="https://kalokea.in/shop/" style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">Shop New Arrivals</a>
         </td></tr>
       </table>
     `;
@@ -437,7 +435,7 @@ export class EmailService {
       </p>
       <table role="presentation" cellpadding="0" cellspacing="0">
         <tr><td style="border-radius:6px;background:#0a0a0a;">
-          <a href="${siteUrl}/cart"
+          <a href="${siteUrl}/cart/"
              style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
             Retry Payment
           </a>
@@ -472,7 +470,7 @@ export class EmailService {
       </p>
       <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
         <tr><td style="border-radius:6px;background:#0a0a0a;">
-          <a href="${siteUrl}/account/orders"
+          <a href="${siteUrl}/account/orders/"
              style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
             Write a Review
           </a>
@@ -510,7 +508,7 @@ export class EmailService {
       </p>
       <table role="presentation" cellpadding="0" cellspacing="0">
         <tr><td style="border-radius:6px;background:#0a0a0a;">
-          <a href="${siteUrl}/product/${vars.product_slug}"
+          <a href="${siteUrl}/product/${vars.product_slug}/"
              style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
             View Product
           </a>
@@ -554,7 +552,7 @@ export class EmailService {
       </p>`}
       <table role="presentation" cellpadding="0" cellspacing="0">
         <tr><td style="border-radius:6px;background:#0a0a0a;">
-          <a href="${siteUrl}/account/orders"
+          <a href="${siteUrl}/account/orders/"
              style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
             View My Orders
           </a>
@@ -589,12 +587,13 @@ export class EmailService {
       </p>
       <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
         <tr><td style="border-radius:6px;background:#0a0a0a;">
-          <a href="${siteUrl}/shop"
+          <a href="${siteUrl}/shop/"
              style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
             Continue Shopping
           </a>
         </td></tr>
       </table>
+      <p style="margin:18px 0 0;font-size:13px;color:#6b6b6b;">
         If you didn&rsquo;t request this cancellation, please contact us at support@kalokea.in.
       </p>
     `;
@@ -683,7 +682,7 @@ export class EmailService {
         </td></tr>
         ${vars.reason ? `<tr><td style="padding:12px 16px;" colspan="2">
           <span style="font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#6b6b6b;">Reason</span><br>
-          <span style="font-size:14px;color:#0a0a0a;margin-top:4px;display:block;">${vars.reason}</span>
+          <span style="font-size:14px;color:#0a0a0a;margin-top:4px;display:block;">${this.escapeHtml(vars.reason)}</span>
         </td></tr>` : ''}
       </table>
       <p style="margin:0;font-size:13px;color:#6b6b6b;">Log in to the admin panel to review this return.</p>
@@ -715,7 +714,7 @@ export class EmailService {
              style="background:#faf8f5;border:1px solid #e8e4e0;border-radius:8px;margin-bottom:22px;">
         <tr><td style="padding:16px 20px;">
           <p style="margin:0 0 6px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#9a9a9a;">Reason</p>
-          <p style="margin:0;font-size:14px;line-height:1.7;color:#0a0a0a;">${vars.reason}</p>
+          <p style="margin:0;font-size:14px;line-height:1.7;color:#0a0a0a;">${this.escapeHtml(vars.reason)}</p>
         </td></tr>
       </table>` : ''}
       <p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:#6b6b6b;">
@@ -724,7 +723,7 @@ export class EmailService {
       </p>
       <table role="presentation" cellpadding="0" cellspacing="0">
         <tr><td style="border-radius:6px;background:#0a0a0a;">
-          <a href="${siteUrl}/account/orders"
+          <a href="${siteUrl}/account/orders/"
              style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
             View My Orders
           </a>
@@ -759,7 +758,7 @@ export class EmailService {
       </p>
       <table role="presentation" cellpadding="0" cellspacing="0">
         <tr><td style="border-radius:6px;background:#0a0a0a;">
-          <a href="${siteUrl}/account/orders"
+          <a href="${siteUrl}/account/orders/"
              style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
             Track My Order
           </a>
