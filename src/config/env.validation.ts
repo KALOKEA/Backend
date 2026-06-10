@@ -14,6 +14,7 @@ const REQUIRED = [
   'SUPABASE_SERVICE_KEY',
   'JWT_SECRET',
   'JWT_REFRESH_SECRET',
+  'RAZORPAY_WEBHOOK_SECRET',
 ] as const;
 
 // Needed for specific features. Missing ones don't block boot but are warned
@@ -22,7 +23,6 @@ const FEATURE = [
   'ALLOWED_ORIGINS', // CORS allowlist (comma-separated origins)
   'RAZORPAY_KEY_ID',
   'RAZORPAY_KEY_SECRET',
-  'RAZORPAY_WEBHOOK_SECRET',
   'BREVO_API_KEY',
   'CLOUDINARY_CLOUD_NAME',
   'CLOUDINARY_API_KEY',
@@ -32,6 +32,7 @@ const FEATURE = [
   'SHIPROCKET_PICKUP_LOCATION',
   'SHIPROCKET_PICKUP_PINCODE',
   'SHIPROCKET_WEBHOOK_TOKEN',
+  'INSTAGRAM_ACCESS_TOKEN',  // Long-lived Instagram Graph API token for feed
 ] as const;
 
 export function validate(config: Record<string, unknown>) {

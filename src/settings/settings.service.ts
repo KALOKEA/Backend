@@ -33,8 +33,8 @@ const DEFAULTS: StoreSettings = {
   cod_fee: 4900,
   live_chat_widget: '',
   low_stock_threshold: 5,
-  footer_instagram_url: 'https://www.instagram.com/kalokea.in',
-  footer_whatsapp_url: 'https://wa.me/919999999999',
+  footer_instagram_url: 'https://www.instagram.com/kalokea.fashion',
+  footer_whatsapp_url: 'https://wa.me/918799610432',
   footer_facebook_url: 'https://www.facebook.com/kalokea.in',
   footer_pinterest_url: 'https://www.pinterest.com/kalokea',
 };

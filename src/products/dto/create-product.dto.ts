@@ -59,4 +59,9 @@ export class CreateProductDto {
   @IsOptional()
   @IsNumber()
   sort_weight?: number;
+
+  /** Fabric composition and care instructions (displayed on product page). */
+  @IsOptional()
+  @IsString()
+  fabric_care?: string;
 }

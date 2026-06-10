@@ -109,6 +109,7 @@ export class AuthService {
         .from('users')
         .insert({
           phone: dto.phone || null,
+          // If phone is the OTP identifier but email was also provided, save both
           email: dto.email || null,
           accepted_terms: dto.accepted_terms === true,
           ...(dto.name?.trim() ? { name: dto.name.trim() } : {}),
@@ -116,12 +117,15 @@ export class AuthService {
         .select()
         .single();
       user = newUser;
-    } else if (dto.accepted_terms === true && !existing.accepted_terms) {
-      // Retroactively record acceptance for existing users who tick the checkbox
-      await this.db.client
-        .from('users')
-        .update({ accepted_terms: true })
-        .eq('id', existing.id);
+    } else {
+      // Update existing user: fill in any missing fields if newly provided
+      const updates: Record<string, any> = {};
+      if (dto.accepted_terms === true && !existing.accepted_terms) updates.accepted_terms = true;
+      if (dto.name?.trim() && !existing.name) updates.name = dto.name.trim();
+      if (dto.email?.trim() && !existing.email) updates.email = dto.email.trim();
+      if (Object.keys(updates).length) {
+        await this.db.client.from('users').update(updates).eq('id', existing.id);
+      }
     }
 
     // 15-minute access token — short-lived so a stolen token expires quickly.
@@ -163,28 +167,22 @@ export class AuthService {
 
     if (!user) throw new UnauthorizedException('User not found');
     if ((user.token_version ?? 0) !== (payload.tv ?? 0)) {
-      // Token replay detected — the version no longer matches.
-      // Bump again to kill any remaining sessions (belt-and-suspenders).
-      await this.revokeAllSessions(payload.sub).catch(() => {});
-      throw new UnauthorizedException('Session revoked');
+      // Version mismatch — user explicitly logged out from another device.
+      throw new UnauthorizedException('Session revoked. Please log in again.');
     }
 
-    // ROTATION: bump token_version so the just-used refresh token is
-    // immediately invalidated. The new refresh token carries the new version.
-    const nextVersion = (user.token_version ?? 0) + 1;
-    await this.db.client
-      .from('users')
-      .update({ token_version: nextVersion })
-      .eq('id', payload.sub);
+    // No version rotation on refresh — this prevents multi-tab sessions from
+    // invalidating each other. The version is only bumped on explicit logout.
+    const currentVersion = user.token_version ?? 0;
 
     // Use the fresh DB role so a role change (e.g. promotion to admin) takes
     // effect on the next refresh without forcing a full re-login.
     const access_token = this.jwt.sign(
-      { sub: payload.sub, role: user.role, tv: nextVersion },
+      { sub: payload.sub, role: user.role, tv: currentVersion },
       { expiresIn: '15m' },
     );
     const refresh_token = this.jwt.sign(
-      { sub: payload.sub, role: user.role, tv: nextVersion },
+      { sub: payload.sub, role: user.role, tv: currentVersion },
       { secret: this.config.getOrThrow('JWT_REFRESH_SECRET'), expiresIn: '30d' },
     );
 

@@ -89,6 +89,7 @@ async function bootstrap() {
       .addTag('newsletter', 'Newsletter subscription')
       .addTag('contact', 'Contact form')
       .addTag('feed', 'RSS / Atom product feed')
+      .addTag('instagram-feed', 'Instagram posts feed (public)')
       .addTag('health', 'Health check')
       .build();
 

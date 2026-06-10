@@ -16,4 +16,6 @@ export class UpdateProductDto {
   @IsOptional() @IsNumber()  gst_rate?: number;
   @IsOptional() @IsString()  video_url?: string;
   @IsOptional() @IsNumber()  sort_weight?: number;
+  /** Fabric composition and care instructions. */
+  @IsOptional() @IsString()  fabric_care?: string;
 }

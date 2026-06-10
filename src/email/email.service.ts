@@ -477,7 +477,7 @@ export class EmailService {
         </td></tr>
       </table>
       <p style="margin:0;font-size:12px;line-height:1.6;color:#9a9a9a;">
-        If you have any issues with your order, you can request a return from the same page within 15 days.
+        If you have any issues with your order, you can request a return from the same page within 7 days.
       </p>
     `;
     const html = this.layout({

@@ -28,7 +28,7 @@ INSERT INTO cms_pages (slug, title, content, meta_description) VALUES
   '<p>We''d love to hear from you. Reach out to us for any questions about your order, products, or collaboration opportunities.</p>
 
 <p><strong>Email:</strong> support@kalokea.in<br>
-<strong>Phone:</strong> +91 93101 78308<br>
+<strong>Phone:</strong> +91 87996 10432<br>
 <strong>Hours:</strong> Monday – Saturday, 10 AM – 6 PM IST</p>
 
 <p>For order tracking, visit our <a href="/track-order">Track Order</a> page.</p>',
@@ -94,7 +94,7 @@ INSERT INTO cms_pages (slug, title, content, meta_description) VALUES
 <p>You will receive a tracking number via email and SMS once your order is dispatched. Use our <a href="/track-order">Track Order</a> page to check real-time status.</p>
 
 <h2>Delivery Issues</h2>
-<p>If your order is lost or significantly delayed, please contact us at support@kalokea.in within 15 days of the expected delivery date.</p>',
+<p>If your order is lost or significantly delayed, please contact us at support@kalokea.in within 7 days of the expected delivery date.</p>',
   'Kalokea shipping policy — delivery times, free shipping threshold, and tracking.'
 ),
 (
