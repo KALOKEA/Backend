@@ -24,6 +24,22 @@ export class AuthService {
     const identifier = dto.phone || dto.email;
     if (!identifier) throw new BadRequestException('Phone or email required');
 
+    // Per-identifier cooldown (60 s): prevents distributed OTP flooding attacks
+    // on a victim's phone/email even when per-IP rate limits are bypassed via
+    // rotating IPs. We check for any unused session created in the last 60 s.
+    const cooldownThreshold = new Date(Date.now() - 60 * 1000).toISOString();
+    const { data: recentSession } = await this.db.client
+      .from('otp_sessions')
+      .select('created_at')
+      .eq('identifier', identifier)
+      .eq('used', false)
+      .gt('created_at', cooldownThreshold)
+      .limit(1)
+      .maybeSingle();
+    if (recentSession) {
+      throw new BadRequestException('OTP already sent. Please wait 60 seconds before requesting a new code.');
+    }
+
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const otp_hash = await bcrypt.hash(otp, 10);
     const expires_at = new Date(Date.now() + 5 * 60 * 1000).toISOString();

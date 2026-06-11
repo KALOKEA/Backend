@@ -5,7 +5,23 @@
     "start": "node dist/main.js",
     "start:dev": "ts-node src/main.ts",
     "build": "tsc -p tsconfig.json",
-    "seed": "node scripts/seed.js"
+    "seed": "node scripts/seed.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage"
+  },
+  "jest": {
+    "moduleFileExtensions": ["js", "json", "ts"],
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "coverageDirectory": "../coverage",
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^src/(.*)$": "<rootDir>/$1"
+    }
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
@@ -37,8 +53,12 @@
     "ws": "^8.21.0"
   },
   "devDependencies": {
+    "@nestjs/testing": "^10.0.0",
     "@types/compression": "^1.7.5",
+    "@types/jest": "^29.5.0",
     "@types/multer": "^2.1.0",
-    "@types/passport-jwt": "^4.0.1"
+    "@types/passport-jwt": "^4.0.1",
+    "jest": "^29.5.0",
+    "ts-jest": "^29.1.0"
   }
 }

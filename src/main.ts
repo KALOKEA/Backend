@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
@@ -10,7 +10,13 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const logger = new Logger('Bootstrap');
+  const app = await NestFactory.create(AppModule, {
+    rawBody: true,
+    // Use NestJS structured logger instead of plain console — respects log levels
+    // set by LOG_LEVEL env var (error | warn | log | debug | verbose).
+    logger: ['error', 'warn', 'log', 'debug'],
+  });
 
   // Railway/Cloudflare put a proxy in front of the app. Trust the first hop so
   // req.ip reflects the real client (needed for correct per-IP rate limiting).
@@ -130,10 +136,11 @@ async function bootstrap() {
     });
   }
 
-  await app.listen(process.env.PORT || 3001);
-  console.log(`Kalokea API running on port ${process.env.PORT || 3001}`);
+  const port = process.env.PORT || 3001;
+  await app.listen(port);
+  logger.log(`Kalokea API running on port ${port}`);
   if (process.env.SWAGGER_ENABLED === 'true') {
-    console.log(`Swagger docs: http://localhost:${process.env.PORT || 3001}/api/docs`);
+    logger.log(`Swagger docs: http://localhost:${port}/api/docs`);
   }
 }
 bootstrap();
