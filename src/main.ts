@@ -18,7 +18,33 @@ async function bootstrap() {
 
   // Compress all responses — typically 60-80% smaller JSON payloads
   app.use(compression());
-  app.use(helmet());
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", 'data:', 'https://res.cloudinary.com'],
+          connectSrc: ["'self'"],
+          fontSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          frameSrc: ["'none'"],
+          upgradeInsecureRequests: [],
+        },
+      },
+      // Strict Transport Security — 1 year, include subdomains
+      hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+      // Prevent MIME-type sniffing
+      noSniff: true,
+      // Block clickjacking
+      frameguard: { action: 'deny' },
+      // Disable X-Powered-By (already done by Helmet default, but explicit)
+      hidePoweredBy: true,
+      // Referrer policy
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    }),
+  );
   app.use(cookieParser());
 
   // ALLOWED_ORIGINS (Railway env var) must include ALL frontend origins:
@@ -51,9 +77,10 @@ async function bootstrap() {
     transform: true,
   }));
 
-  // OpenAPI / Swagger — enabled by default; set SWAGGER_DISABLED=true in
-  // production env vars to hide the docs UI if desired.
-  if (process.env.SWAGGER_DISABLED !== 'true') {
+  // OpenAPI / Swagger — DISABLED by default in production for security.
+  // Set SWAGGER_ENABLED=true in Railway to expose /api/docs (dev/staging only).
+  // Never enable in production unless behind auth/IP allowlist.
+  if (process.env.SWAGGER_ENABLED === 'true') {
     const config = new DocumentBuilder()
       .setTitle('Kalokea API')
       .setDescription(
@@ -105,7 +132,7 @@ async function bootstrap() {
 
   await app.listen(process.env.PORT || 3001);
   console.log(`Kalokea API running on port ${process.env.PORT || 3001}`);
-  if (process.env.SWAGGER_DISABLED !== 'true') {
+  if (process.env.SWAGGER_ENABLED === 'true') {
     console.log(`Swagger docs: http://localhost:${process.env.PORT || 3001}/api/docs`);
   }
 }

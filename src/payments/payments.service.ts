@@ -121,6 +121,18 @@ export class PaymentsService {
       throw new BadRequestException('Order not found');
     }
 
+    // Idempotency: return the existing Razorpay order if one was already created
+    // for this Kalokea order (e.g. user double-clicked "Pay Now" or retried a
+    // failed payment attempt). Prevents orphaned Razorpay orders and double-billing.
+    if (order.razorpay_order_id) {
+      return {
+        razorpay_order_id: order.razorpay_order_id,
+        amount: Math.round(order.total),
+        currency: 'INR',
+        key_id: keyId,
+      };
+    }
+
     const amount = Math.round(order.total); // order.total is already stored in paise (Razorpay's unit)
 
     const response = await fetch('https://api.razorpay.com/v1/orders', {
