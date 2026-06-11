@@ -774,6 +774,67 @@ export class EmailService {
     await this.send(to, `Order in progress — #${vars.order_id}`, html, undefined, 'order_processing');
   }
 
+  // ── Abandoned cart recovery ────────────────────────────────────────────────
+
+  async sendAbandonedCartEmail(to: string, vars: {
+    customer_name: string;
+    items: Array<{
+      name: string;
+      variant: string;   // e.g. "M / Black"
+      price: number;     // paise
+      image_url?: string;
+    }>;
+  }): Promise<void> {
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
+
+    const itemRows = vars.items.map((item) => `
+      <tr>
+        <td style="padding:12px 16px;border-bottom:1px solid #e8e4e0;font-size:13px;color:#0a0a0a;">
+          <strong>${item.name}</strong>
+          <div style="font-size:11px;color:#6b6b6b;margin-top:2px;">${item.variant}</div>
+        </td>
+        <td style="padding:12px 16px;border-bottom:1px solid #e8e4e0;font-size:13px;color:#0a0a0a;text-align:right;white-space:nowrap;">
+          ${this.money(item.price)}
+        </td>
+      </tr>`).join('');
+
+    const body = `
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Hi ${vars.customer_name}, you left some beautiful pieces behind.
+        Your cart is saved and ready when you are.
+      </p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+             style="margin:0 0 24px;border:1px solid #e8e4e0;border-radius:8px;overflow:hidden;">
+        <thead>
+          <tr style="background:#faf8f5;">
+            <th style="padding:10px 16px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#9a9a9a;text-align:left;font-weight:normal;">Item</th>
+            <th style="padding:10px 16px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#9a9a9a;text-align:right;font-weight:normal;">Price</th>
+          </tr>
+        </thead>
+        <tbody>${itemRows}</tbody>
+      </table>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:22px;">
+        <tr><td style="border-radius:6px;background:#0a0a0a;">
+          <a href="${siteUrl}/cart/"
+             style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
+            Return to Cart
+          </a>
+        </td></tr>
+      </table>
+      <p style="margin:0;font-size:12px;line-height:1.6;color:#9a9a9a;">
+        Items are reserved for a limited time. Complete your order before they sell out.
+      </p>
+    `;
+    const html = this.layout({
+      preheader: `You left items in your Kalokea cart — complete your order`,
+      eyebrow: 'Your Cart',
+      heading: 'You left something behind',
+      body,
+      footerNote: 'You received this because you have items in your cart. <a href="${siteUrl}/account/profile/" style="color:#c8a4a5;text-decoration:underline;">Update preferences</a>',
+    });
+    await this.send(to, 'Your Kalokea cart is waiting', html, undefined, 'abandoned_cart');
+  }
+
   // ── ShipRocket: AWB assigned ───────────────────────────────────────────────
 
   async sendOrderAwbAssigned(to: string, vars: {

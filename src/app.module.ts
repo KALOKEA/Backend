@@ -32,6 +32,7 @@ import { SmsModule } from './sms/sms.module';
 import { ContactModule } from './contact/contact.module';
 import { CronModule } from './cron/cron.module';
 import { HomepageContentModule } from './homepage-content/homepage-content.module';
+import { SiteContentModule } from './site-content/site-content.module';
 import { ShiprocketModule } from './shiprocket/shiprocket.module';
 import { CmsModule } from './cms/cms.module';
 import { InstagramFeedModule } from './instagram-feed/instagram-feed.module';
@@ -71,6 +72,7 @@ import { validate } from './config/env.validation';
     ContactModule,
     CronModule,
     HomepageContentModule,
+    SiteContentModule,
     ShiprocketModule,
     CmsModule,
     InstagramFeedModule,

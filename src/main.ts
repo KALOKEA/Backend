@@ -8,9 +8,29 @@ import cookieParser from 'cookie-parser';
 const compression = require('compression');
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
+import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
+
+  // ── Sentry — initialise before anything else so all exceptions are captured.
+  // Activates only when SENTRY_DSN env var is set AND @sentry/node is installed.
+  // To enable: set SENTRY_DSN in Railway + run `npm install @sentry/node`.
+  if (process.env.SENTRY_DSN) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const Sentry = require('@sentry/node');
+      Sentry.init({
+        dsn: process.env.SENTRY_DSN,
+        environment: process.env.NODE_ENV || 'production',
+        tracesSampleRate: 0.1,
+      });
+      logger.log('Sentry initialised');
+    } catch {
+      logger.warn('SENTRY_DSN set but @sentry/node not installed — Sentry skipped');
+    }
+  }
+
   const app = await NestFactory.create(AppModule, {
     rawBody: true,
     // Use NestJS structured logger instead of plain console — respects log levels
@@ -52,6 +72,11 @@ async function bootstrap() {
     }),
   );
   app.use(cookieParser());
+
+  // Attach X-Correlation-ID to every request (read from client or generated).
+  // Lets all log lines within a single request be traced together.
+  const correlationMiddleware = new CorrelationIdMiddleware();
+  app.use((req: any, res: any, next: any) => correlationMiddleware.use(req, res, next));
 
   // ALLOWED_ORIGINS (Railway env var) must include ALL frontend origins:
   // https://kalokea.in,https://www.kalokea.in
