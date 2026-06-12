@@ -628,7 +628,12 @@ export class OrdersService {
 
     if (userId) q = q.eq('user_id', userId);
     if (status) q = q.eq('status', status);
-    if (search) q = q.ilike('order_number', `%${search}%`);
+    if (search) {
+      const s = search.replace(/'/g, "''"); // escape single quotes
+      q = (q as any).or(
+        `order_number.ilike.%${s}%,guest_email.ilike.%${s}%`,
+      );
+    }
 
     const { data, error, count } = await q;
     if (error) throw error;

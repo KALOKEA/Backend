@@ -162,20 +162,18 @@ export class UsersService {
     return { message: 'User deleted' };
   }
 
-  /** Admin: search users by name/email/phone.
-   *  Uses separate chained filters instead of .or() string interpolation to
-   *  prevent PostgREST filter-injection via structural characters (NH-1). */
+  /** Admin: search users by name/email/phone. */
   async search(q: string, limit = 20) {
-    // Sanitise: strip PostgREST structural characters that could break the query.
-    const safe = q.replace(/[,.()"']/g, '');
-    const pattern = `%${safe}%`;
+    // Escape double quotes so the quoted value is safe inside PostgREST .or().
+    // Quoting the value (rather than stripping chars) preserves dots in emails.
+    const escaped = q.replace(/"/g, '""');
+    const pattern = `%${escaped}%`;
+    const v = `"${pattern}"`; // PostgREST quoted value
 
-    // Supabase doesn't support chained OR across columns without .or(), so we
-    // use the safe form with named params to prevent structural injection.
     const { data } = await this.db.client
       .from('users')
       .select('id, name, email, phone, role, created_at')
-      .or(`name.ilike.${pattern},email.ilike.${pattern},phone.ilike.${pattern}`)
+      .or(`name.ilike.${v},email.ilike.${v},phone.ilike.${v}`)
       .order('created_at', { ascending: false })
       .limit(limit);
     return data || [];
