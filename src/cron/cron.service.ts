@@ -43,7 +43,9 @@ export class CronService {
     const { error } = await this.db.client
       .from('otp_sessions')
       .delete()
-      .or(`used.eq.true,expires_at.lt.${cutoff}`);
+      // Quote the datetime value so PostgREST doesn't mistake the `.` in the
+      // ISO timestamp for a column/operator separator.
+      .or(`used.eq.true,expires_at.lt."${cutoff}"`);
     if (error) {
       this.logger.error(`OTP session cleanup failed: ${error.message}`);
     } else {

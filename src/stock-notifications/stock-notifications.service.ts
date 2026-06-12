@@ -1,4 +1,5 @@
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
 
@@ -9,6 +10,7 @@ export class StockNotificationsService {
   constructor(
     private db: DatabaseService,
     private email: EmailService,
+    private config: ConfigService,
   ) {}
 
   /**
@@ -106,7 +108,7 @@ export class StockNotificationsService {
     variantLabel: string,
     productSlug: string,
   ): Promise<void> {
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://kalokea.in';
+    const siteUrl = this.config.get<string>('SITE_URL') || 'https://kalokea.in';
     // Delegate to EmailService using the layout shell for brand consistency.
     // We call the private send method indirectly via a dedicated public wrapper
     // added in email.service.ts.
