@@ -709,13 +709,9 @@ export class OrdersService {
 
     // Admin cancel: release stock reservations, restock if inventory was
     // committed, trigger Razorpay refund if the order was paid online.
-    // (Customer self-cancel uses cancelOrder() which has the 12-hour guard.)
     if (dto.status === 'cancelled') {
-      // Release any pending soft reservations immediately.
       await this.db.client.from('stock_reservations').delete().eq('order_id', id);
 
-      // Only restock if inventory was actually decremented:
-      // COD commits stock at creation; Razorpay commits stock on payment.captured.
       const stockWasDeducted =
         order.payment_method === 'cod' || order.payment_status === 'paid';
 
@@ -733,7 +729,6 @@ export class OrdersService {
         }
       }
 
-      // Trigger Razorpay refund if paid online.
       if (order.payment_status === 'paid' && order.payment_method !== 'cod' && order.razorpay_payment_id) {
         const keyId = this.config.get<string>('RAZORPAY_KEY_ID');
         const keySecret = this.config.get<string>('RAZORPAY_KEY_SECRET');
@@ -758,7 +753,6 @@ export class OrdersService {
         }
       }
 
-      // Send cancellation email to customer.
       if (userEmail) {
         await this.email.sendOrderCancellation(userEmail, {
           customer_name: customerName,
