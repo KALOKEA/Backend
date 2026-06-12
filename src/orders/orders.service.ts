@@ -614,7 +614,7 @@ export class OrdersService {
     return { message: 'Order cancelled successfully' };
   }
 
-  async findAll(userId?: string, page = 1, limit = 10, status?: string) {
+  async findAll(userId?: string, page = 1, limit = 10, status?: string, search?: string) {
     const from = (page - 1) * limit;
     // Admin fetch joins users so the order list can show customer names/emails.
     const selectCols = userId
@@ -628,6 +628,7 @@ export class OrdersService {
 
     if (userId) q = q.eq('user_id', userId);
     if (status) q = q.eq('status', status);
+    if (search) q = q.ilike('order_number', `%${search}%`);
 
     const { data, error, count } = await q;
     if (error) throw error;
@@ -989,8 +990,7 @@ export class OrdersService {
       o.coupon_code || '',
       o.discount ? (o.discount / 100).toFixed(2) : '0',
       new Date(o.created_at).toISOString(),
-    ].map((v: any) => `"${String(v).replace(/"/g, '""')}"`).join(','));
-
-    return `${header}\n${lines.join('\n')}`;
+    ].map((v: any) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+    return [header, ...lines].join('\n');
   }
 }

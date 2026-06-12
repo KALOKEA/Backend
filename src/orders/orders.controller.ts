@@ -57,8 +57,9 @@ export class OrdersController {
     @Query('page') page = '1',
     @Query('limit') limit = '20',
     @Query('status') status?: string,
+    @Query('search') search?: string,
   ) {
-    return this.orders.findAll(undefined, +page, +limit, status);
+    return this.orders.findAll(undefined, +page, +limit, status, search);
   }
 
   /** Admin: export all orders as CSV. Static route MUST be declared before :id. */
