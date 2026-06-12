@@ -145,12 +145,11 @@ export class AuthService {
       }
     }
 
-    // 15-minute access token — short-lived so a stolen token expires quickly.
-    // tv (token_version) is embedded so JwtStrategy can detect revocation even
-    // within the 15-minute window (logout / suspicious activity bumps tv).
+    // 24-hour access token. token_version (tv) in the DB allows instant
+    // server-side revocation on logout — bumping tv invalidates all tokens.
     const access_token = this.jwt.sign(
       { sub: user.id, role: user.role, tv: user.token_version ?? 0 },
-      { expiresIn: '15m' },
+      { expiresIn: '24h' },
     );
     // Refresh token carries the user's token_version; bumping that column
     // (logout / revoke) invalidates every outstanding refresh token.
@@ -196,7 +195,7 @@ export class AuthService {
     // effect on the next refresh without forcing a full re-login.
     const access_token = this.jwt.sign(
       { sub: payload.sub, role: user.role, tv: currentVersion },
-      { expiresIn: '15m' },
+      { expiresIn: '24h' },
     );
     const refresh_token = this.jwt.sign(
       { sub: payload.sub, role: user.role, tv: currentVersion },
