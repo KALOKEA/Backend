@@ -162,7 +162,12 @@ export class ShiprocketController {
     @Headers('x-shiprocket-token') srToken: string,
   ) {
     const expected = this.config.get<string>('SHIPROCKET_WEBHOOK_TOKEN');
-    if (expected && srToken !== expected) {
+    if (!expected) {
+      // Env var not configured → reject all incoming webhooks rather than accept blindly.
+      this.logger.error(`SHIPROCKET_WEBHOOK_TOKEN not set — rejecting webhook to prevent spoofing`);
+      return { ok: false };
+    }
+    if (srToken !== expected) {
       this.logger.warn(`ShipRocket webhook: invalid token header`);
       return { ok: false };
     }

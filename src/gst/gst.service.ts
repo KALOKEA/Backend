@@ -384,17 +384,20 @@ export class GstService {
     return new Date(d).toLocaleDateString('en-IN');
   }
   private dayStart(d: string): string {
-    return new Date(`${d}T00:00:00.000Z`).toISOString();
+    // Parse as IST midnight (UTC+05:30) so date-range queries match Indian calendar days.
+    // e.g. '2026-05-01' → 2026-04-30T18:30:00.000Z (= 2026-05-01 00:00 IST)
+    return new Date(`${d}T00:00:00+05:30`).toISOString();
   }
   private dayEnd(d: string): string {
-    const x = new Date(`${d}T00:00:00.000Z`);
-    x.setUTCDate(x.getUTCDate() + 1);
+    // Exclusive upper bound = start of NEXT day IST
+    const x = new Date(`${d}T00:00:00+05:30`);
+    x.setUTCDate(x.getUTCDate() + 1); // adds exactly 86 400 000 ms
     return x.toISOString();
   }
   private toCsv(rows: (string | number)[][]): string {
     const esc = (v: string | number) => {
       const s = String(v ?? '');
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"`  : s;
     };
     return rows.map((r) => r.map(esc).join(',')).join('\r\n');
   }
