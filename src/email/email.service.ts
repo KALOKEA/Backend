@@ -18,6 +18,17 @@ export class EmailService {
     this.senderName = this.config.get('BREVO_SENDER_NAME') || 'Kalokea';
   }
 
+  /**
+   * Generate a one-click unsubscribe URL for a recipient email address.
+   * Token = base64url(email) — the /newsletter/unsubscribe endpoint verifies
+   * this and marks the address as unsubscribed in the DB.
+   */
+  private unsubUrl(email: string): string {
+    const backendUrl = this.config.get('BACKEND_URL') || 'https://api.kalokea.in';
+    const token = Buffer.from(email.trim().toLowerCase()).toString('base64url');
+    return `${backendUrl}/newsletter/unsubscribe?t=${token}`;
+  }
+
   /** Append a row to email_log (fire-and-forget — never throws). */
   private async logEmail(
     recipient: string,
@@ -376,10 +387,7 @@ export class EmailService {
   }
 
   async sendNewsletterWelcome(to: string): Promise<void> {
-    const backendUrl = this.config.get('BACKEND_URL') || 'https://api.kalokea.in';
-    // base64url-encode the email for the one-click unsubscribe link
-    const unsubToken = Buffer.from(to.trim().toLowerCase()).toString('base64url');
-    const unsubUrl = `${backendUrl}/newsletter/unsubscribe?t=${unsubToken}`;
+    const unsubUrl = this.unsubUrl(to);
 
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
@@ -402,6 +410,65 @@ export class EmailService {
     });
     await this.send(to, 'Welcome to Kalokea', html, undefined, 'newsletter_welcome');
   }
+
+  /** Admin: send a newsletter campaign with custom subject and HTML body */
+  async sendNewsletterCampaign(to: string, subject: string, bodyHtml: string, previewText?: string): Promise<void> {
+    const unsubUrl = this.unsubUrl(to);
+    const html = this.layout({
+      preheader: previewText || subject,
+      eyebrow: 'Newsletter',
+      heading: subject,
+      body: bodyHtml,
+      footerNote: `Not interested? <a href="${unsubUrl}" style="color:#c8a4a5;text-decoration:underline;">Unsubscribe</a> at any time.`,
+    });
+    await this.send(to, subject, html, undefined, 'newsletter_campaign');
+  }
+
+  // ── Back in stock ─────────────────────────────────────────────────────────
+
+  async sendBackInStock(to: string, vars: {
+    productName: string;
+    variantLabel: string;
+    productSlug: string;
+    siteUrl: string;
+  }): Promise<void> {
+    const unsubUrl = this.unsubUrl(to);
+    const productUrl = `${vars.siteUrl}/product/${vars.productSlug}/`;
+    const body = `
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Good news! The item you were waiting for is back in stock.
+      </p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"
+             style="margin:0 0 24px;background:#faf8f5;border:1px solid #e8e4e0;border-radius:8px;">
+        <tr><td style="padding:16px 20px;">
+          <p style="margin:0 0 4px;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#9a9a9a;">Item</p>
+          <p style="margin:0;font-size:15px;color:#0a0a0a;font-weight:600;">${vars.productName}</p>
+          <p style="margin:4px 0 0;font-size:13px;color:#6b6b6b;">${vars.variantLabel}</p>
+        </td></tr>
+      </table>
+      <p style="margin:0 0 22px;font-size:13px;line-height:1.7;color:#6b6b6b;">
+        Popular items sell out fast &mdash; grab yours before it&rsquo;s gone again.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0">
+        <tr><td style="border-radius:6px;background:#0a0a0a;">
+          <a href="${productUrl}"
+             style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
+            Shop Now
+          </a>
+        </td></tr>
+      </table>
+    `;
+    const html = this.layout({
+      preheader: `${vars.productName} (${vars.variantLabel}) is back in stock at Kalokea`,
+      eyebrow: 'Back in Stock',
+      heading: 'Your item is available again',
+      body,
+      footerNote: `You requested this alert. <a href="${unsubUrl}" style="color:#c8a4a5;text-decoration:underline;">Unsubscribe</a>`,
+    });
+    await this.send(to, `Back in stock: ${vars.productName}`, html, undefined, 'back_in_stock');
+  }
+
+  // ── Low stock ─────────────────────────────────────────────────────────────
 
   async sendLowStockAlert(vars: {
     product_name: string;
@@ -786,6 +853,7 @@ export class EmailService {
     }>;
   }): Promise<void> {
     const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
+    const unsubUrl = this.unsubUrl(to);
 
     const itemRows = vars.items.map((item) => `
       <tr>
@@ -830,7 +898,8 @@ export class EmailService {
       eyebrow: 'Your Cart',
       heading: 'You left something behind',
       body,
-      footerNote: 'You received this because you have items in your cart. <a href="${siteUrl}/account/profile/" style="color:#c8a4a5;text-decoration:underline;">Update preferences</a>',
+      // DPDPA compliance: marketing emails must include a one-click unsubscribe link
+      footerNote: `You received this because you have items in your cart. <a href="${unsubUrl}" style="color:#c8a4a5;text-decoration:underline;">Unsubscribe</a>`,
     });
     await this.send(to, 'Your Kalokea cart is waiting', html, undefined, 'abandoned_cart');
   }

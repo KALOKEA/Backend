@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Query, UseGuards } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -52,5 +52,30 @@ export class AdminController {
     @Query('email_type') emailType?: string,
   ) {
     return this.admin.getEmailLog(+page, +limit, status, emailType);
+  }
+
+  @Get('email-log/:id')
+  getEmailLogEntry(@Param('id') id: string) {
+    return this.admin.getEmailLogEntry(id);
+  }
+
+  @Post('email-log/:id/resend')
+  resendEmail(@Param('id') id: string) {
+    return this.admin.resendEmail(id);
+  }
+
+  @Get('analytics/clv')
+  getClv() {
+    return this.admin.getCustomerLifetimeValue();
+  }
+
+  @Get('analytics/conversion-rate')
+  getConversionRate() {
+    return this.admin.getConversionRate();
+  }
+
+  @Get('analytics/sales-by-category')
+  getSalesByCategory() {
+    return this.admin.getSalesByCategory();
   }
 }

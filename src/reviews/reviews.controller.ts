@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, HttpCode } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { ReviewsService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
@@ -57,5 +57,24 @@ export class ReviewsController {
   @Delete(':id/reject')
   reject(@Param('id') id: string) {
     return this.reviews.reject(id);
+  }
+
+  @UseGuards(AdminGuard)
+  @AdminAction('review.reply')
+  @Post(':id/reply')
+  reply(@Param('id') id: string, @Body('reply') reply: string) {
+    return this.reviews.replyToReview(id, reply);
+  }
+
+  @UseGuards(AdminGuard)
+  @AdminAction('review.flag')
+  @HttpCode(200)
+  @Post(':id/flag')
+  flag(
+    @Param('id') id: string,
+    @Body('flagged') flagged: boolean,
+    @Body('flag_reason') flagReason?: string,
+  ) {
+    return this.reviews.flagReview(id, flagged, flagReason);
   }
 }

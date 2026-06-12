@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, UnauthorizedException, Logger } from '
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import { randomInt } from 'crypto';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
 import { SmsService } from '../sms/sms.service';
@@ -40,7 +41,7 @@ export class AuthService {
       throw new BadRequestException('OTP already sent. Please wait 60 seconds before requesting a new code.');
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otp = randomInt(100000, 1000000).toString();
     const otp_hash = await bcrypt.hash(otp, 10);
     const expires_at = new Date(Date.now() + 5 * 60 * 1000).toISOString();
 

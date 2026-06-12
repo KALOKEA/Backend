@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Query, Body, Res, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Query, Body, Res, BadRequestException, HttpCode } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { NewsletterService } from './newsletter.service';
@@ -78,6 +78,38 @@ a{display:inline-block;padding:11px 28px;background:#0a0a0a;color:#fff;text-deco
     @Query('active') active?: string,
   ) {
     return this.newsletter.listSubscribers(+page, +limit, active);
+  }
+
+  /** Admin: stats summary (total, active, unsubscribed, campaigns) */
+  @UseGuards(AdminGuard)
+  @Get('admin/stats')
+  getStats() {
+    return this.newsletter.getStats();
+  }
+
+  /** Admin: send campaign to all active subscribers */
+  @UseGuards(AdminGuard)
+  @HttpCode(200)
+  @Post('admin/send-campaign')
+  sendCampaign(
+    @Body('subject') subject: string,
+    @Body('body') body: string,
+    @Body('preview_text') previewText?: string,
+  ) {
+    if (!subject?.trim() || !body?.trim()) {
+      throw new BadRequestException('subject and body are required');
+    }
+    return this.newsletter.sendCampaign(subject.trim(), body.trim(), previewText?.trim());
+  }
+
+  /** Admin: list past campaigns */
+  @UseGuards(AdminGuard)
+  @Get('admin/campaigns')
+  listCampaigns(
+    @Query('page') page = '1',
+    @Query('limit') limit = '20',
+  ) {
+    return this.newsletter.listCampaigns(+page, +limit);
   }
 
   /** Admin: CSV export of all active subscribers */

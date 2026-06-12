@@ -36,6 +36,7 @@ import { SiteContentModule } from './site-content/site-content.module';
 import { ShiprocketModule } from './shiprocket/shiprocket.module';
 import { CmsModule } from './cms/cms.module';
 import { InstagramFeedModule } from './instagram-feed/instagram-feed.module';
+import { StockNotificationsModule } from './stock-notifications/stock-notifications.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { validate } from './config/env.validation';
 
@@ -76,6 +77,7 @@ import { validate } from './config/env.validation';
     ShiprocketModule,
     CmsModule,
     InstagramFeedModule,
+    StockNotificationsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

@@ -161,11 +161,24 @@ async function bootstrap() {
     });
   }
 
+  // Graceful shutdown — allow in-flight requests to finish before the process exits.
+  // Railway and Docker send SIGTERM on deploy/scale-down; without this the process
+  // dies instantly, dropping active requests and leaving DB connections dangling.
+  app.enableShutdownHooks();
+
   const port = process.env.PORT || 3001;
   await app.listen(port);
   logger.log(`Kalokea API running on port ${port}`);
   if (process.env.SWAGGER_ENABLED === 'true') {
     logger.log(`Swagger docs: http://localhost:${port}/api/docs`);
   }
+
+  // Explicit SIGTERM handler — gives NestJS time to drain the HTTP server and
+  // close the Supabase pool cleanly before the container is killed.
+  process.on('SIGTERM', async () => {
+    logger.warn('SIGTERM received — shutting down gracefully');
+    await app.close();
+    process.exit(0);
+  });
 }
 bootstrap();

@@ -129,4 +129,28 @@ export class ReviewsService {
     }
     return { message: 'Review rejected and deleted' };
   }
+
+  /** Admin reply to a review */
+  async replyToReview(id: string, reply: string) {
+    const { data, error } = await this.db.client
+      .from('reviews')
+      .update({ admin_reply: reply, admin_replied_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error || !data) throw new NotFoundException('Review not found');
+    return data;
+  }
+
+  /** Admin flag / unflag a review */
+  async flagReview(id: string, flagged: boolean, flagReason?: string) {
+    const { data, error } = await this.db.client
+      .from('reviews')
+      .update({ flagged, flag_reason: flagged ? (flagReason || null) : null })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error || !data) throw new NotFoundException('Review not found');
+    return data;
+  }
 }

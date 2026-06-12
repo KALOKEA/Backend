@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
+import { StockNotificationsService } from '../stock-notifications/stock-notifications.service';
 
 /** Fallback when store_settings.low_stock_threshold is not set. */
 const DEFAULT_LOW_STOCK_THRESHOLD = 5;
@@ -13,6 +14,7 @@ export class CronService {
   constructor(
     private db: DatabaseService,
     private email: EmailService,
+    private stockNotifications: StockNotificationsService,
   ) {}
 
   /**
@@ -147,7 +149,7 @@ export class CronService {
       // Step 2 — get user emails (profile table)
       const { data: users, error: usersErr } = await this.db.client
         .from('users')
-        .select('id, email, full_name')
+        .select('id, email, name')
         .in('id', userIds);
 
       if (usersErr || !users) {
@@ -198,7 +200,7 @@ export class CronService {
         });
 
         await this.email.sendAbandonedCartEmail(user.email, {
-          customer_name: user.full_name || 'there',
+          customer_name: user.name || 'there',
           items,
         }).catch((err: any) => {
           this.logger.error(`Abandoned cart email failed for ${user.email}: ${err?.message}`);
@@ -212,6 +214,23 @@ export class CronService {
       }
     } catch (err: any) {
       this.logger.error(`Abandoned cart cron failed: ${err?.message}`);
+    }
+  }
+
+  /**
+   * Back-in-stock notifications — runs every 30 minutes.
+   * Delegates to StockNotificationsService which queries stock_notifications,
+   * checks current stock levels, and emails pending subscribers.
+   */
+  @Cron('*/30 * * * *')
+  async sendBackInStockNotifications() {
+    try {
+      const sent = await this.stockNotifications.sendPendingNotifications();
+      if (sent > 0) {
+        this.logger.log(`Back-in-stock: sent ${sent} notification(s)`);
+      }
+    } catch (err: any) {
+      this.logger.error(`Back-in-stock cron failed: ${err?.message}`);
     }
   }
 }

@@ -67,7 +67,19 @@ export class ReturnsService {
   async findAll() {
     const { data } = await this.db.client
       .from('returns')
-      .select('*, orders(order_number), users(name, email)')
+      .select(`
+        *,
+        orders(order_number),
+        users(name, email),
+        order_items(
+          id,
+          snapshot_name,
+          snapshot_sku,
+          snapshot_size,
+          snapshot_colour,
+          quantity
+        )
+      `)
       .order('created_at', { ascending: false });
     return data || [];
   }
