@@ -161,28 +161,100 @@ export class AdminService {
     const type: string = entry.email_type;
     const metadata: any = entry.metadata || {};
 
+    /** Helper: fetch order with items and user */
+    const fetchOrder = async (orderId: string) => {
+      const { data } = await this.db.client
+        .from('orders')
+        .select('*, order_items(*), users(name, email)')
+        .eq('id', orderId)
+        .single();
+      return data;
+    };
+
+    let handled = true;
     switch (type) {
       case 'newsletter_welcome':
         await this.email.sendNewsletterWelcome(to);
         break;
+
       case 'order_confirmation':
-        // Re-send order confirmation: fetch order details
         if (metadata.order_id) {
-          const { data: order } = await this.db.client
-            .from('orders')
-            .select('*, order_items(*), users(name, email)')
-            .eq('id', metadata.order_id)
-            .single();
+          const order = await fetchOrder(metadata.order_id);
           if (order) await this.email.sendOrderConfirmation(to, order as any);
         }
         break;
+
+      case 'order_shipped':
+        if (metadata.order_id) {
+          const { data: order } = await this.db.client
+            .from('orders')
+            .select('order_number, tracking_number, awb_code, users(name)')
+            .eq('id', metadata.order_id)
+            .single();
+          if (order) {
+            await this.email.sendOrderShipped(to, {
+              customer_name: (order.users as any)?.name || 'Customer',
+              order_id: order.order_number,
+              tracking_number: order.awb_code || order.tracking_number || '',
+              courier_name: metadata.courier || 'Shiprocket',
+            });
+          }
+        }
+        break;
+
+      case 'order_cancelled':
+        if (metadata.order_id) {
+          const { data: order } = await this.db.client
+            .from('orders')
+            .select('order_number, total, users(name)')
+            .eq('id', metadata.order_id)
+            .single();
+          if (order) {
+            await this.email.sendOrderCancellation(to, {
+              customer_name: (order.users as any)?.name || 'Customer',
+              order_id: order.order_number,
+              total: order.total,
+            });
+          }
+        }
+        break;
+
+      case 'return_filed':
+      case 'admin_return_filed':
+        // Customer-facing return confirmation email: no standard template exists.
+        // Fall through to default (retry queue) so the cron can handle it.
+        handled = false;
+        break;
+
+      case 'payment_failed':
+        if (metadata.order_id) {
+          const { data: order } = await this.db.client
+            .from('orders')
+            .select('order_number, total, users(name)')
+            .eq('id', metadata.order_id)
+            .single();
+          if (order) {
+            await this.email.sendPaymentFailed(to, {
+              customer_name: (order.users as any)?.name || 'Customer',
+              order_id: order.order_number,
+              amount: order.total,
+            });
+          }
+        }
+        break;
+
       default:
-        // Generic resend: update retry count and mark as retrying
-        await this.db.client
-          .from('email_log')
-          .update({ status: 'retrying', retry_count: (entry.retry_count || 0) + 1 })
-          .eq('id', id);
-        return { message: `Email type '${type}' queued for retry` };
+        handled = false;
+        break;
+    }
+
+    if (!handled) {
+      // Unsupported type: mark as retrying so the cron can pick it up
+      await this.db.client
+        .from('email_log')
+        .update({ status: 'retrying', retry_count: (entry.retry_count || 0) + 1 })
+        .eq('id', id);
+      return { message: `Email type '${type}' queued for retry` };
     }
 
     await this.db.client
@@ -238,13 +310,8 @@ export class AdminService {
 
   /** Sales by category — revenue grouped by category */
   async getSalesByCategory() {
-    const { data } = await this.db.client
-      .from('order_items')
-      .select('snapshot_name, quantity, snapshot_price, orders!inner(payment_status)')
-      .eq('orders.payment_status', 'paid');
-
-    if (!data) return [];
-    // Note: without category in snapshot we approximate by order_items product join
+    // Single query with category join — the previous version made a dead first
+    // query whose result was only used for a null check then discarded.
     const { data: catData } = await this.db.client
       .from('order_items')
       .select(`
@@ -260,8 +327,10 @@ export class AdminService {
       .eq('orders.payment_status', 'paid')
       .limit(500);
 
+    if (!catData) return [];
+
     const catMap: Record<string, { category: string; revenue: number; units: number }> = {};
-    for (const item of catData || []) {
+    for (const item of catData) {
       const cat = (item as any)?.product_variants?.products?.categories?.name || 'Uncategorised';
       if (!catMap[cat]) catMap[cat] = { category: cat, revenue: 0, units: 0 };
       catMap[cat].revenue += Number(item.snapshot_price) * Number(item.quantity);
