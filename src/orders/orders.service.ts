@@ -170,12 +170,10 @@ export class OrdersService {
     });
 
     const { cgst, sgst, igst } = this.gst.splitTax(gstTotal, intraState);
-    // Read shipping/COD from admin settings (falls back to compile-time constants
-    // if the migration 007 hasn't been run yet).
-    const storeSettings = await this.settings.get().catch((): null => null);
-    const freeThreshold = storeSettings?.shipping_free_threshold ?? SHIPPING_FREE_THRESHOLD;
-    const shippingFee   = storeSettings?.shipping_fee ?? SHIPPING_FEE;
-    const codFeeAmount  = storeSettings?.cod_fee ?? COD_FEE;
+    // Reuse the settings already fetched above (avoid a second round-trip).
+    const freeThreshold = settings?.shipping_free_threshold ?? SHIPPING_FREE_THRESHOLD;
+    const shippingFee   = settings?.shipping_fee ?? SHIPPING_FEE;
+    const codFeeAmount  = settings?.cod_fee ?? COD_FEE;
     const shipping = subtotal >= freeThreshold ? 0 : shippingFee;
     const codFee = paymentMethod === 'cod' ? codFeeAmount : 0;
     // Total = taxable goods value + GST + shipping + COD fee. (Shipping is not
@@ -709,6 +707,67 @@ export class OrdersService {
       }
     }
 
+    // Admin cancel: release stock reservations, restock if inventory was
+    // committed, trigger Razorpay refund if the order was paid online.
+    // (Customer self-cancel uses cancelOrder() which has the 12-hour guard.)
+    if (dto.status === 'cancelled') {
+      // Release any pending soft reservations immediately.
+      await this.db.client.from('stock_reservations').delete().eq('order_id', id);
+
+      // Only restock if inventory was actually decremented:
+      // COD commits stock at creation; Razorpay commits stock on payment.captured.
+      const stockWasDeducted =
+        order.payment_method === 'cod' || order.payment_status === 'paid';
+
+      if (stockWasDeducted) {
+        const { data: orderItems } = await this.db.client
+          .from('order_items').select('variant_id, quantity').eq('order_id', id);
+        for (const item of orderItems || []) {
+          const { error: restockErr } = await this.db.client.rpc('restock_variant', {
+            p_variant_id: item.variant_id,
+            p_qty: item.quantity,
+          });
+          if (restockErr) {
+            this.logger.warn(`Admin cancel: stock restore failed for variant ${item.variant_id}: ${restockErr.message}`);
+          }
+        }
+      }
+
+      // Trigger Razorpay refund if paid online.
+      if (order.payment_status === 'paid' && order.payment_method !== 'cod' && order.razorpay_payment_id) {
+        const keyId = this.config.get<string>('RAZORPAY_KEY_ID');
+        const keySecret = this.config.get<string>('RAZORPAY_KEY_SECRET');
+        if (keyId && keySecret) {
+          const refundRes = await fetch(
+            `https://api.razorpay.com/v1/payments/${order.razorpay_payment_id}/refund`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
+              },
+              body: JSON.stringify({ amount: Math.round(order.total) }),
+            },
+          );
+          const refundResult: any = await refundRes.json();
+          if (!refundRes.ok) {
+            this.logger.error(`Admin cancel Razorpay refund failed: ${JSON.stringify(refundResult)}`);
+          } else {
+            await this.db.client.from('orders').update({ payment_status: 'refunded' }).eq('id', id);
+          }
+        }
+      }
+
+      // Send cancellation email to customer.
+      if (userEmail) {
+        await this.email.sendOrderCancellation(userEmail, {
+          customer_name: customerName,
+          order_id: order.order_number,
+          total: Number(order.total) || 0,
+        }).catch(() => {});
+      }
+    }
+
     return { message: 'Status updated' };
   }
 
@@ -910,6 +969,7 @@ export class OrdersService {
         total, taxable_value, total_gst, shipping,
         coupon_code, discount,
         address_snapshot, company_name, gstin,
+        guest_email,
         created_at,
         users(name, email),
         order_items(quantity, snapshot_price, snapshot_name, snapshot_sku)

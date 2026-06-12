@@ -227,6 +227,13 @@ export class PaymentsService {
         .update({ confirmed: true })
         .eq('order_id', order.id)
         .then(() => {}, () => {});
+
+      // Send booking confirmation + GST receipt. This is the webhook-fallback
+      // path — without this, customers get no confirmation email when the
+      // Razorpay webhook is delayed or never arrives.
+      await this.orders.sendConfirmationEmails(order.id).catch((e: any) =>
+        this.logger.warn(`Confirmation email (verifyPayment fallback) failed for ${order.id}: ${e?.message}`),
+      );
     }
 
     return { verified: true };

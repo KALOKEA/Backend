@@ -376,11 +376,23 @@ export class ShiprocketService {
     const terminalStatuses = ['Delivered', 'Cancelled', 'RTO Delivered', 'Lost'];
     const { data: orders } = await this.db.client
       .from('orders')
-      .select('id, awb_code, shiprocket_status')
+      .select('id, awb_code, shiprocket_status, status')
       .not('awb_code', 'is', null)
       .not('shiprocket_status', 'in', `(${terminalStatuses.map(s => `"${s}"`).join(',')})`);
 
     if (!orders?.length) return { updated: 0 };
+
+    // Mirror the status map used in handleWebhook so bulk sync stays consistent.
+    const statusMap: Record<string, string> = {
+      'Shipped':          'shipped',
+      'Out For Delivery': 'shipped',
+      'Delivered':        'delivered',
+      'Undelivered':      'shipped',
+      'Cancelled':        'cancelled',
+      'RTO Initiated':    'shipped',
+      'RTO Delivered':    'cancelled',
+      'Lost':             'cancelled',
+    };
 
     let updated = 0;
     for (const order of orders) {
@@ -389,9 +401,19 @@ export class ShiprocketService {
         const status = track?.tracking_data?.shipment_track?.[0]?.current_status
                     || track?.tracking_data?.current_status;
         if (status && status !== order.shiprocket_status) {
+          const ourStatus = statusMap[status];
+          const updates: any = { shiprocket_status: status, tracking_synced_at: new Date().toISOString() };
+          // Also advance orders.status / fulfillment_status so the admin order
+          // list reflects actual delivery state (previously only shiprocket_status
+          // was written, leaving orders stuck as 'shipped' after delivery).
+          if (ourStatus && order.status !== ourStatus) {
+            updates.status = ourStatus;
+            if (ourStatus === 'shipped')   updates.fulfillment_status = 'shipped';
+            if (ourStatus === 'delivered') updates.fulfillment_status = 'delivered';
+          }
           await this.db.client
             .from('orders')
-            .update({ shiprocket_status: status, tracking_synced_at: new Date().toISOString() })
+            .update(updates)
             .eq('id', order.id);
           updated++;
         }
