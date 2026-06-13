@@ -30,12 +30,14 @@ export class OrdersService {
     return `KLK-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
   }
 
-  /** Load the (single) cart for a user or guest session. */
+  /** Load the (single) cart for a user or guest session.
+   * Returns empty when neither userId nor sessionId is provided (instead of
+   * throwing), so callers can fall back to client-supplied cart_items. */
   private async loadCart(userId?: string, sessionId?: string) {
     let cartQuery = this.db.client.from('carts').select('id');
     if (userId) cartQuery = cartQuery.eq('user_id', userId);
     else if (sessionId) cartQuery = cartQuery.eq('session_id', sessionId).is('user_id', null);
-    else throw new BadRequestException('User or session required');
+    else return { cart: null, cartItems: [] };
 
     const { data: cart } = await cartQuery.single();
     if (!cart) return { cart: null, cartItems: [] };
@@ -205,7 +207,24 @@ export class OrdersService {
    * chosen address when available.
    */
   async quote(dto: CreateOrderDto, userId?: string) {
-    const { cartItems } = await this.loadCart(userId, dto.session_id);
+    const { cartItems: serverItems } = await this.loadCart(userId, dto.session_id);
+
+    // Fall back to client-supplied items when the server cart is empty — same
+    // pattern as createOrder, so the quote reflects what will actually be charged.
+    let cartItems: any[] = serverItems;
+    if (!cartItems.length && dto.cart_items?.length) {
+      cartItems = await this.loadClientItems(dto.cart_items) as any[];
+    }
+    // Nothing to quote — return a zero breakdown rather than throwing, so the
+    // checkout summary can show ₹0 instead of staying stuck on "Calculating…".
+    if (!cartItems.length) {
+      return {
+        subtotal: 0, discount: 0, taxable_value: 0,
+        total_gst: 0, cgst: 0, sgst: 0, igst: 0,
+        intra_state: false, place_of_supply: undefined,
+        shipping: 0, cod_fee: 0, total: 0, coupon_error: null,
+      };
+    }
 
     let buyerState = dto.address_snapshot?.state;
     if (!buyerState && dto.address_id && userId) {
