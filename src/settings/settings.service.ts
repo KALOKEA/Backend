@@ -9,16 +9,21 @@ export interface StoreSettings {
   seller_state: string;
   gst_rate: number;
   admin_email: string;
-  shipping_fee: number;           // paise
+  shipping_fee: number;            // paise
   shipping_free_threshold: number; // paise
   cod_fee: number;                 // paise
   live_chat_widget: string;        // embed HTML/script for chat widget
   low_stock_threshold: number;     // alert when stock drops below this
   footer_instagram_url: string;
   footer_whatsapp_url: string;
-  // Added in migration 023 — social links shown in the footer
   footer_facebook_url: string;
   footer_pinterest_url: string;
+  // Flash sale
+  flash_sale_enabled: boolean;
+  flash_sale_end_time: string;     // ISO 8601 UTC
+  flash_sale_label: string;
+  flash_sale_discount_pct: number;
+  flash_sale_coupon: string;
 }
 
 const DEFAULTS: StoreSettings = {
@@ -37,6 +42,11 @@ const DEFAULTS: StoreSettings = {
   footer_whatsapp_url: 'https://wa.me/918799610432',
   footer_facebook_url: 'https://www.facebook.com/kalokea.in',
   footer_pinterest_url: 'https://www.pinterest.com/kalokea',
+  flash_sale_enabled: false,
+  flash_sale_end_time: '',
+  flash_sale_label: 'Flash Sale',
+  flash_sale_discount_pct: 20,
+  flash_sale_coupon: '',
 };
 
 @Injectable()
@@ -55,6 +65,8 @@ export class SettingsService {
       shipping_free_threshold: Number(data?.shipping_free_threshold ?? DEFAULTS.shipping_free_threshold),
       cod_fee: Number(data?.cod_fee ?? DEFAULTS.cod_fee),
       low_stock_threshold: Number(data?.low_stock_threshold ?? DEFAULTS.low_stock_threshold),
+      flash_sale_enabled: Boolean(data?.flash_sale_enabled ?? false),
+      flash_sale_discount_pct: Number(data?.flash_sale_discount_pct ?? DEFAULTS.flash_sale_discount_pct),
     };
   }
 
@@ -69,9 +81,7 @@ export class SettingsService {
   /**
    * GST collected for a month — reads from gst_ledger (the authoritative,
    * immutable accounting record) so the numbers EXACTLY match what was charged
-   * at checkout. The old approach re-computed from orders using the inclusive
-   * model (÷1.05) which gave a different number than the exclusive model used at
-   * checkout (×0.05). This fix ensures admin reports match GSTR-1 filings (NC-4).
+   * at checkout.
    */
   async gstReport(month?: string) {
     const s = await this.get();
@@ -83,7 +93,6 @@ export class SettingsService {
     const end = new Date(start);
     end.setUTCMonth(end.getUTCMonth() + 1);
 
-    // Read from the immutable ledger — only 'sale' rows (returns are negative entries).
     const { data } = await this.db.client
       .from('gst_ledger')
       .select('taxable_value, total_gst, cgst, sgst, igst, gross')
@@ -102,16 +111,7 @@ export class SettingsService {
       igst       += Number(row.igst) || 0;
     }
 
-    return {
-      period: m,
-      gst_rate: rate,
-      ledger_rows: rows,
-      gross_sales: grossSales,
-      net_value: netValue,
-      total_gst: totalGst,
-      cgst,
-      sgst,
-      igst,
-    };
+    return { period: m, gst_rate: rate, ledger_rows: rows, gross_sales: grossSales,
+             net_value: netValue, total_gst: totalGst, cgst, sgst, igst };
   }
 }

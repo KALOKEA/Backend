@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Header } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, Header, UseInterceptors } from '@nestjs/common';
+import { CacheInterceptor, CacheKey, CacheTTL } from '@nestjs/cache-manager';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
@@ -22,6 +23,8 @@ export class ProductsController {
   @UseGuards(OptionalJwtAuthGuard)
   @Get()
   @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(60000)
   findAll(@Query() query: ProductQueryDto, @CurrentUser() user: any) {
     if (user?.role !== 'admin') {
       query.include_inactive = false;

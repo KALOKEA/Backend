@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { CacheModule } from '@nestjs/cache-manager';
 import { AdminAuditInterceptor } from './common/interceptors/admin-audit.interceptor';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { HealthModule } from './health/health.module';
@@ -45,6 +46,8 @@ import { validate } from './config/env.validation';
     ConfigModule.forRoot({ isGlobal: true, validate }),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+    // ── In-memory cache (60 s TTL) — upgrade to Redis by setting REDIS_URL env var
+    CacheModule.register({ isGlobal: true, ttl: 60000, max: 500 }),
     DatabaseModule,
     EmailModule,
     HealthModule,

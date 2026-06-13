@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNumber, Min, Max, IsEmail } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsBoolean, Min, Max, IsEmail } from 'class-validator';
 
 export class UpdateSettingsDto {
   @IsOptional() @IsString() seller_name?: string;
@@ -28,4 +28,20 @@ export class UpdateSettingsDto {
   @IsOptional() @IsString() footer_whatsapp_url?: string;
   @IsOptional() @IsString() footer_facebook_url?: string;
   @IsOptional() @IsString() footer_pinterest_url?: string;
+
+  // ── Flash sale ───────────────────────────────────────────────────────────────
+  /** Whether the flash sale banner is active. */
+  @IsOptional() @IsBoolean() flash_sale_enabled?: boolean;
+
+  /** ISO 8601 date-time when the sale ends (UTC). E.g. 2026-06-15T23:59:59Z */
+  @IsOptional() @IsString() flash_sale_end_time?: string;
+
+  /** Banner headline shown to shoppers. */
+  @IsOptional() @IsString() flash_sale_label?: string;
+
+  /** Discount percentage shown in the banner (informational only — coupon handles actual discount). */
+  @IsOptional() @IsNumber() @Min(1) @Max(90) flash_sale_discount_pct?: number;
+
+  /** Coupon code shoppers copy from the banner (optional). */
+  @IsOptional() @IsString() flash_sale_coupon?: string;
 }

@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Header } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards, Header, UseInterceptors } from '@nestjs/common';
+import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { Public } from '../common/decorators/public.decorator';
@@ -14,6 +15,8 @@ export class CategoriesController {
   @Public()
   @Get()
   @Header('Cache-Control', 'public, max-age=300, stale-while-revalidate=600')
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(300000)
   findAll() {
     return this.categories.findAll();
   }

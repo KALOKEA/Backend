@@ -20,13 +20,18 @@ export class SettingsController {
   async getPublic() {
     const s = await this.settings.get();
     return {
-      footer_instagram_url:  s.footer_instagram_url,
-      footer_whatsapp_url:   s.footer_whatsapp_url,
-      footer_facebook_url:   s.footer_facebook_url,
-      footer_pinterest_url:  s.footer_pinterest_url,
-      live_chat_widget:      s.live_chat_widget,
-      seller_gstin:          s.seller_gstin,
-      seller_name:           s.seller_name,
+      footer_instagram_url:    s.footer_instagram_url,
+      footer_whatsapp_url:     s.footer_whatsapp_url,
+      footer_facebook_url:     s.footer_facebook_url,
+      footer_pinterest_url:    s.footer_pinterest_url,
+      live_chat_widget:        s.live_chat_widget,
+      seller_gstin:            s.seller_gstin,
+      seller_name:             s.seller_name,
+      flash_sale_enabled:      s.flash_sale_enabled,
+      flash_sale_end_time:     s.flash_sale_end_time,
+      flash_sale_label:        s.flash_sale_label,
+      flash_sale_discount_pct: s.flash_sale_discount_pct,
+      flash_sale_coupon:       s.flash_sale_coupon,
     };
   }
 
