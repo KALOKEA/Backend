@@ -93,6 +93,7 @@ export class AuthService {
     // closes the rotating-IP bypass of the per-IP throttler.
     const MAX_ATTEMPTS = 5;
     if ((session.attempts ?? 0) >= MAX_ATTEMPTS) {
+      // Best-effort consume — if DB fails, the session is still expired by its expires_at
       await this.db.client.from('otp_sessions').update({ used: true }).eq('id', session.id);
       throw new UnauthorizedException('Too many attempts. Please request a new code.');
     }
@@ -100,19 +101,29 @@ export class AuthService {
     const valid = await bcrypt.compare(dto.otp, session.otp_hash);
     if (!valid) {
       const attempts = (session.attempts ?? 0) + 1;
-      await this.db.client
+      const { error: attemptsErr } = await this.db.client
         .from('otp_sessions')
         .update({ attempts, ...(attempts >= MAX_ATTEMPTS ? { used: true } : {}) })
         .eq('id', session.id);
+      if (attemptsErr) {
+        this.logger.error(`Failed to record OTP attempt for session ${session.id}: ${attemptsErr.message}`);
+      }
       throw new UnauthorizedException(
         attempts >= MAX_ATTEMPTS ? 'Too many attempts. Please request a new code.' : 'Invalid OTP',
       );
     }
 
-    await this.db.client
+    // SECURITY: Mark the session used BEFORE issuing tokens.
+    // If this write fails, we must NOT issue a token — the OTP would remain
+    // replayable and an attacker could mint unlimited valid sessions.
+    const { error: markUsedErr } = await this.db.client
       .from('otp_sessions')
       .update({ used: true })
       .eq('id', session.id);
+    if (markUsedErr) {
+      this.logger.error(`Failed to mark OTP session ${session.id} as used: ${markUsedErr.message}`);
+      throw new InternalServerErrorException('Failed to complete sign-in. Please try again.');
+    }
 
     // Explicit, parameter-bound lookup (no string interpolation into the
     // PostgREST .or() filter — avoids any filter-injection surface).
@@ -143,7 +154,8 @@ export class AuthService {
       if (dto.name?.trim() && !existing.name) updates.name = dto.name.trim();
       if (dto.email?.trim() && !existing.email) updates.email = dto.email.trim();
       if (Object.keys(updates).length) {
-        await this.db.client.from('users').update(updates).eq('id', existing.id);
+        const { error: updateUserErr } = await this.db.client.from('users').update(updates).eq('id', existing.id);
+        if (updateUserErr) this.logger.error(`Failed to update user ${existing.id} on login: ${updateUserErr.message}`);
       }
     }
 
@@ -214,7 +226,7 @@ export class AuthService {
    */
   async revokeAllSessions(userId: string) {
     const { data: user } = await this.db.client
-      .from('users').select('token_version').eq('id', userId).maybeSingle();
+          .from('users').select('token_version').eq('id', userId).maybeSingle();
     const next = (user?.token_version ?? 0) + 1;
     const { error: tvErr } = await this.db.client
       .from('users').update({ token_version: next }).eq('id', userId);
@@ -229,7 +241,7 @@ export class AuthService {
       });
       await this.revokeAllSessions(payload.sub);
     } catch {
-      // Invalid/expired token — nothing to revoke.
+      // Invalid/expired token -- nothing to revoke.
     }
   }
 

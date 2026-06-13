@@ -355,8 +355,12 @@ export class ShiprocketService {
       if (ourStatus === 'delivered') updates.fulfillment_status = 'delivered';
     }
 
-    await this.db.client.from('orders').update(updates).eq('id', order.id);
-    this.logger.log(`Webhook: order ${order.id} status="${status}" (our: ${ourStatus || 'no change'})`);
+    const { error: srUpdateErr } = await this.db.client.from('orders').update(updates).eq('id', order.id);
+    if (srUpdateErr) {
+      this.logger.error(`Webhook: failed to update order ${order.id} to status "${status}": ${srUpdateErr.message}`);
+    } else {
+      this.logger.log(`Webhook: order ${order.id} status="${status}" (our: ${ourStatus || 'no change'})`);
+    }
   }
 
   // ─── Manifest generation ─────────────────────────────────────────────────────
@@ -535,7 +539,9 @@ export class ShiprocketService {
 
   async setDefaultPackagingProfile(id: string) {
     await this.db.client.from('packaging_profiles').update({ is_default: false }).neq('id', id);
-    await this.db.client.from('packaging_profiles').update({ is_default: true }).eq('id', id);
+    const { error: setDefaultErr } = await this.db.client
+      .from('packaging_profiles').update({ is_default: true }).eq('id', id);
+    if (setDefaultErr) throw new BadRequestException('Failed to set default packaging profile');
     return { message: 'Default updated' };
   }
 }

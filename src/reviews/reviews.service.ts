@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
 import { CreateReviewDto } from './dto/create-review.dto';
@@ -123,7 +123,8 @@ export class ReviewsService {
   async reject(id: string) {
     const { data: review } = await this.db.client
       .from('reviews').select('product_id').eq('id', id).single();
-    await this.db.client.from('reviews').delete().eq('id', id);
+    const { error: deleteErr } = await this.db.client.from('reviews').delete().eq('id', id);
+    if (deleteErr) throw new InternalServerErrorException('Failed to delete review');
     if (review?.product_id) {
       this.refreshProductStats(review.product_id).catch(() => {});
     }

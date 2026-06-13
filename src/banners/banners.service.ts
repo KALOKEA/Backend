@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { CreateBannerDto } from './dto/create-banner.dto';
 
@@ -35,7 +35,8 @@ export class BannersService {
   }
 
   async remove(id: string) {
-    await this.db.client.from('banners').delete().eq('id', id);
+    const { error } = await this.db.client.from('banners').delete().eq('id', id);
+    if (error) throw new InternalServerErrorException('Failed to delete banner');
     return { message: 'Banner deleted' };
   }
 }
