@@ -242,4 +242,124 @@ describe('PaymentsService', () => {
       expect(mockOrders.sendConfirmationEmails).not.toHaveBeenCalled();
     });
   });
+
+  // ─── payment.failed tests ─────────────────────────────────────────────────
+
+  describe('handleWebhook — payment.failed', () => {
+    it('marks order as failed and sends sendPaymentFailed email', async () => {
+      const failedOrder = {
+        id: 'ord-f1',
+        order_number: 'KLK-FAIL-001',
+        total: 150000,
+        guest_email: null,
+        users: { email: 'customer@test.com', name: 'Customer Name' },
+      };
+      const payload = {
+        event: 'payment.failed',
+        payload: {
+          payment: {
+            entity: { id: 'pay_fail_1', order_id: 'rp_order_1', amount: 150000 },
+          },
+        },
+      };
+      const rawBody = Buffer.from(JSON.stringify(payload));
+      const sig = makeHmac(WEBHOOK_SECRET, rawBody.toString());
+      const req = { headers: { 'x-razorpay-signature': sig }, rawBody } as any;
+
+      mockDbClient.from.mockImplementation((table: string) => {
+        const q: any = {};
+        const noop = () => q;
+        q.update = jest.fn().mockReturnThis();
+        q.eq = jest.fn().mockReturnThis();
+        q.select = jest.fn().mockReturnThis();
+        q.delete = jest.fn().mockReturnThis();
+        q.single = jest.fn().mockResolvedValue({ data: failedOrder });
+        q.then = (_: any, __: any) => Promise.resolve({});
+        return q;
+      });
+
+      const result = await service.handleWebhook(req);
+      expect(result).toEqual({ received: true });
+      expect(mockEmail.sendPaymentFailed).toHaveBeenCalledWith(
+        'customer@test.com',
+        expect.objectContaining({
+          customer_name: 'Customer Name',
+          order_id: 'KLK-FAIL-001',
+          amount: 150000,
+        }),
+      );
+    });
+
+    it('sends to guest_email when no registered user', async () => {
+      const failedGuestOrder = {
+        id: 'ord-fg1',
+        order_number: 'KLK-GFAIL-001',
+        total: 80000,
+        guest_email: 'guest@test.com',
+        users: null,
+      };
+      const payload = {
+        event: 'payment.failed',
+        payload: {
+          payment: { entity: { id: 'pay_g1', order_id: 'rp_g1', amount: 80000 } },
+        },
+      };
+      const rawBody = Buffer.from(JSON.stringify(payload));
+      const sig = makeHmac(WEBHOOK_SECRET, rawBody.toString());
+      const req = { headers: { 'x-razorpay-signature': sig }, rawBody } as any;
+
+      mockDbClient.from.mockImplementation(() => {
+        const q: any = {};
+        const noop = () => q;
+        q.update = jest.fn().mockReturnThis();
+        q.eq = jest.fn().mockReturnThis();
+        q.select = jest.fn().mockReturnThis();
+        q.delete = jest.fn().mockReturnThis();
+        q.single = jest.fn().mockResolvedValue({ data: failedGuestOrder });
+        q.then = (_: any, __: any) => Promise.resolve({});
+        return q;
+      });
+
+      await service.handleWebhook(req);
+      expect(mockEmail.sendPaymentFailed).toHaveBeenCalledWith(
+        'guest@test.com',
+        expect.objectContaining({ customer_name: 'Customer' }),
+      );
+    });
+
+    it('releases stock reservations on payment.failed', async () => {
+      const failedOrder = {
+        id: 'ord-f2',
+        order_number: 'KLK-FAIL-002',
+        total: 50000,
+        guest_email: 'x@test.com',
+        users: null,
+      };
+      const payload = {
+        event: 'payment.failed',
+        payload: { payment: { entity: { id: 'pay_f2', order_id: 'rp_f2', amount: 50000 } } },
+      };
+      const rawBody = Buffer.from(JSON.stringify(payload));
+      const sig = makeHmac(WEBHOOK_SECRET, rawBody.toString());
+      const req = { headers: { 'x-razorpay-signature': sig }, rawBody } as any;
+
+      const deleteMock = jest.fn().mockReturnThis();
+      const eqMock = jest.fn().mockReturnThis();
+
+      mockDbClient.from.mockImplementation((table: string) => {
+        const q: any = {};
+        q.update = jest.fn().mockReturnThis();
+        q.eq = eqMock;
+        q.select = jest.fn().mockReturnThis();
+        q.single = jest.fn().mockResolvedValue({ data: failedOrder });
+        q.delete = deleteMock;
+        q.then = (_: any, __: any) => Promise.resolve({});
+        return q;
+      });
+
+      await service.handleWebhook(req);
+      // stock_reservations.delete().eq('order_id', ...) should have been called
+      expect(deleteMock).toHaveBeenCalled();
+    });
+  });
 });
