@@ -63,7 +63,7 @@ export class OrdersController {
   }
 
   /** Admin: export all orders as CSV. Static route MUST be declared before :id. */
-  @UseGuards(AdminGuard)
+  @UseGuards(JwtAuthGuard, AdminGuard)
   @Get('export')
   async exportCsv(
     @Res() res: Response,

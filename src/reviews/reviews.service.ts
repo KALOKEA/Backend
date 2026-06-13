@@ -21,16 +21,20 @@ export class ReviewsService {
   }
 
   async create(dto: CreateReviewDto, userId: string) {
-    // Verify purchase (NC-3)
+    // Verify purchase — allow paid online orders OR delivered COD orders (M-10)
     const { data: verifyRows } = await this.db.client
       .from('orders')
-      .select('id, order_items!inner(product_variants!inner(product_id))')
+      .select('id, payment_method, payment_status, status, order_items!inner(product_variants!inner(product_id))')
       .eq('user_id', userId)
-      .eq('payment_status', 'paid')
       .eq('order_items.product_variants.product_id', dto.product_id)
-      .limit(1);
+      .limit(20);
 
-    if (!verifyRows || verifyRows.length === 0) {
+    const eligible = (verifyRows || []).filter((o: any) =>
+      o.payment_status === 'paid' ||
+      (o.payment_method === 'cod' && o.status === 'delivered')
+    );
+
+    if (!eligible.length) {
       throw new BadRequestException('You can only review products from your verified purchases');
     }
 

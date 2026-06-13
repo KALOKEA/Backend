@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException, Logger } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { GstService } from '../gst/gst.service';
 import { EmailService } from '../email/email.service';
@@ -6,6 +6,8 @@ import { CreateReturnDto } from './dto/create-return.dto';
 
 @Injectable()
 export class ReturnsService {
+  private readonly logger = new Logger(ReturnsService.name);
+
   constructor(
     private db: DatabaseService,
     private gst: GstService,
@@ -156,10 +158,13 @@ export class ReturnsService {
     }
     for (const it of items) {
       if (!it.variant_id) continue;
-      await this.db.client.rpc('restock_variant', {
+      const { error: restockErr } = await this.db.client.rpc('restock_variant', {
         p_variant_id: it.variant_id,
         p_qty: it.quantity || 0,
       });
+      if (restockErr) {
+        this.logger.error(`Returns restock failed for variant ${it.variant_id}: ${restockErr.message}`);
+      }
     }
   }
 }

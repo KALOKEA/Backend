@@ -309,7 +309,7 @@ export class OrdersService {
     if (dto.coupon_code) {
       const subtotalRaw = cartItems.reduce(
         (s: number, it: any) => s + it.product_variants.price * it.quantity, 0);
-      const result = await this.coupons.validate({ code: dto.coupon_code, order_value: subtotalRaw, user_id: userId });
+      const result = await this.coupons.validate({ code: dto.coupon_code, order_value: subtotalRaw, user_id: userId, guest_email: dto.guest_email });
       discount = result.discount;
       appliedCoupon = { id: result.coupon_id, code: result.code };
     }
@@ -557,11 +557,14 @@ export class OrdersService {
       );
     }
 
-    // Mark as cancelled
-    await this.db.client
+    // Mark as cancelled — verify DB write succeeded before triggering downstream actions
+    const { error: cancelErr } = await this.db.client
       .from('orders')
       .update({ status: 'cancelled', fulfillment_status: 'cancelled' })
       .eq('id', id);
+    if (cancelErr) {
+      throw new InternalServerErrorException('Failed to cancel order. Please try again.');
+    }
 
     // Release any pending stock reservations immediately (don't wait for the 15-min cron).
     // This restores availability to other buyers the moment the customer cancels.
@@ -1004,18 +1007,24 @@ export class OrdersService {
     const { data } = await q;
     const rows = data || [];
 
+    // RFC-4180 CSV escaping: wrap values containing comma, quote, or newline in double-quotes
+    const esc = (v: any): string => {
+      const s = String(v ?? '');
+      return /[,"\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+
     const header = 'order_number,status,payment_status,payment_method,total,customer_name,customer_email,coupon_code,discount,created_at';
     const lines = rows.map((o: any) => [
-      o.order_number,
-      o.status,
-      o.payment_status || '',
-      o.payment_method || '',
-      (o.total / 100).toFixed(2),
-      (o.users as any)?.name || o.guest_email || '',
-      (o.users as any)?.email || o.guest_email || '',
-      o.coupon_code || '',
-      o.discount ? (o.discount / 100).toFixed(2) : '',
-      o.created_at,
+      esc(o.order_number),
+      esc(o.status),
+      esc(o.payment_status || ''),
+      esc(o.payment_method || ''),
+      esc((o.total / 100).toFixed(2)),
+      esc((o.users as any)?.name || o.guest_email || ''),
+      esc((o.users as any)?.email || o.guest_email || ''),
+      esc(o.coupon_code || ''),
+      esc(o.discount ? (o.discount / 100).toFixed(2) : ''),
+      esc(o.created_at),
     ].join(','));
     return [header, ...lines].join('\n');
   }

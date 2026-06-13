@@ -65,7 +65,7 @@ export class CronService {
         .from('store_settings')
         .select('low_stock_threshold')
         .limit(1)
-        .single();
+        .maybeSingle();
       const threshold: number = settings?.low_stock_threshold ?? DEFAULT_LOW_STOCK_THRESHOLD;
 
       const { data: variants } = await this.db.client
@@ -201,14 +201,24 @@ export class CronService {
           };
         });
 
-        await this.email.sendAbandonedCartEmail(user.email, {
-          customer_name: user.name || 'there',
-          items,
-        }).catch((err: any) => {
+        try {
+          await this.email.sendAbandonedCartEmail(user.email, {
+            customer_name: user.name || 'there',
+            items,
+          });
+          // Write to email_log so dedup check prevents re-send within 24 hours
+          const { error: logErr } = await this.db.client.from('email_log').insert({
+            recipient: user.email,
+            email_type: 'abandoned_cart',
+            subject: 'You left something behind',
+          });
+          if (logErr) {
+            this.logger.warn(`email_log insert failed for ${user.email}: ${logErr.message}`);
+          }
+          sent++;
+        } catch (err: any) {
           this.logger.error(`Abandoned cart email failed for ${user.email}: ${err?.message}`);
-        });
-
-        sent++;
+        }
       }
 
       if (sent > 0) {

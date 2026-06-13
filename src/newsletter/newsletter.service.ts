@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
 
@@ -15,9 +15,9 @@ export class NewsletterService {
       .upsert({ email: normalized, is_active: true }, { onConflict: 'email' });
     if (error) {
       this.logger.error(`Newsletter subscribe failed: ${error.message}`);
-    } else {
-      await this.email.sendNewsletterWelcome(normalized).catch(() => {});
+      throw new InternalServerErrorException('Failed to subscribe. Please try again.');
     }
+    await this.email.sendNewsletterWelcome(normalized).catch(() => {});
     return { message: 'Subscribed' };
   }
 
@@ -29,6 +29,7 @@ export class NewsletterService {
       .eq('email', normalized);
     if (error) {
       this.logger.error(`Newsletter unsubscribe failed: ${error.message}`);
+      throw new InternalServerErrorException('Failed to unsubscribe. Please try again.');
     }
     return { message: 'Unsubscribed successfully' };
   }
