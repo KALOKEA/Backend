@@ -677,7 +677,9 @@ export class OrdersService {
     if (fulfillmentMap[dto.status]) {
       fulfillmentUpdate.fulfillment_status = fulfillmentMap[dto.status];
     }
-    await this.db.client.from('orders').update(fulfillmentUpdate).eq('id', id);
+    const { error: statusUpdateErr } = await this.db.client
+      .from('orders').update(fulfillmentUpdate).eq('id', id);
+    if (statusUpdateErr) throw new InternalServerErrorException(`Failed to update order status: ${statusUpdateErr.message}`);
 
     // Resolve email for both logged-in users AND guests
     const userEmail = order.guest_email || (order.users as any)?.email;
@@ -993,9 +995,9 @@ export class OrdersService {
       (o.users as any)?.name || o.guest_email || '',
       (o.users as any)?.email || o.guest_email || '',
       o.coupon_code || '',
-      o.discount ? (o.discount / 100).toFixed(2) : '0',
-      new Date(o.created_at).toISOString(),
-    ].map((v: any) => `"${String(v).replace(/"/g, '""')}"`).join(','))
+      o.discount ? (o.discount / 100).toFixed(2) : '',
+      o.created_at,
+    ].join(','));
     return [header, ...lines].join('\n');
   }
 }

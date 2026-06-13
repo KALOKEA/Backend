@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, UnauthorizedException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -53,7 +53,9 @@ export class AuthService {
       .eq('identifier', identifier)
       .eq('used', false);
 
-    await this.db.client.from('otp_sessions').insert({ identifier, otp_hash, expires_at });
+    const { error: insertErr } = await this.db.client
+      .from('otp_sessions').insert({ identifier, otp_hash, expires_at });
+    if (insertErr) throw new InternalServerErrorException('Failed to create OTP session');
 
     // Send via email if email provided, otherwise log (SMS to be added later)
     if (dto.email) {
@@ -214,7 +216,9 @@ export class AuthService {
     const { data: user } = await this.db.client
       .from('users').select('token_version').eq('id', userId).maybeSingle();
     const next = (user?.token_version ?? 0) + 1;
-    await this.db.client.from('users').update({ token_version: next }).eq('id', userId);
+    const { error: tvErr } = await this.db.client
+      .from('users').update({ token_version: next }).eq('id', userId);
+    if (tvErr) this.logger.error(`Failed to bump token_version for user ${userId}: ${tvErr.message}`);
   }
 
   async logout(token?: string) {

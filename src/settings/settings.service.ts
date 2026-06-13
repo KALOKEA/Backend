@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 
@@ -59,9 +59,10 @@ export class SettingsService {
   }
 
   async update(dto: UpdateSettingsDto): Promise<StoreSettings> {
-    await this.db.client
+    const { error } = await this.db.client
       .from('store_settings')
       .upsert({ id: 1, ...dto, updated_at: new Date().toISOString() }, { onConflict: 'id' });
+    if (error) throw new BadRequestException(error.message || 'Failed to save settings');
     return this.get();
   }
 

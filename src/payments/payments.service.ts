@@ -198,11 +198,15 @@ export class PaymentsService {
       .maybeSingle();
 
     if (order && order.payment_status !== 'paid') {
-      await this.db.client.from('orders').update({
+      const { error: verifyUpdateErr } = await this.db.client.from('orders').update({
         payment_status: 'paid',
         status: 'confirmed',
         razorpay_payment_id: dto.razorpay_payment_id,
       }).eq('id', order.id);
+      if (verifyUpdateErr) {
+        this.logger.error(`verifyPayment: failed to mark order ${order.id} as paid: ${verifyUpdateErr.message}`);
+        throw new BadRequestException('Payment verified but order update failed — please contact support');
+      }
 
       // Post GST ledger entry for this sale.
       await this.gst.postSaleLedger(order.id).catch((e) =>
@@ -283,11 +287,15 @@ export class PaymentsService {
       // Only confirm + deduct stock on the FIRST transition to paid, so stock
       // is never double-decremented on a duplicate delivery.
       if (order && order.payment_status !== 'paid') {
-        await this.db.client.from('orders').update({
+        const { error: webhookUpdateErr } = await this.db.client.from('orders').update({
           payment_status: 'paid',
           status: 'confirmed',
           razorpay_payment_id: payment.id,
         }).eq('id', order.id);
+        if (webhookUpdateErr) {
+          this.logger.error(`Webhook: failed to mark order ${order.id} as paid: ${webhookUpdateErr.message}`);
+          throw new BadRequestException('Webhook: order update failed');
+        }
 
         // Record the sale in the GST ledger (online orders post here, not at
         // creation — only a captured payment is a committed taxable sale).
@@ -339,18 +347,6 @@ export class PaymentsService {
             .delete()
             .eq('order_id', failedOrder.id),
         ).catch(() => {});
-      }
-
-      if (failedOrder) {
-        // Notify both logged-in users AND guests (guest_email was missing — GE-1).
-        const userEmail = (failedOrder.users as any)?.email || failedOrder.guest_email;
-        if (userEmail) {
-          await this.email.sendPaymentFailed(userEmail, {
-            customer_name: (failedOrder.users as any)?.name || 'Customer',
-            order_id: failedOrder.order_number,
-            amount: failedOrder.total,
-          }).catch(() => {});
-        }
       }
     }
 

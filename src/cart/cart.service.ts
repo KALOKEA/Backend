@@ -94,7 +94,9 @@ export class CartService {
     if (dto.quantity === 0) {
       await this.db.client.from('cart_items').delete().eq('id', itemId);
     } else {
-      await this.db.client.from('cart_items').update({ quantity: dto.quantity }).eq('id', itemId);
+      const { error: updErr } = await this.db.client
+        .from('cart_items').update({ quantity: dto.quantity }).eq('id', itemId);
+      if (updErr) throw new BadRequestException(`Failed to update cart item: ${updErr.message}`);
     }
     return this.getCart(userId, sessionId);
   }
@@ -139,9 +141,10 @@ export class CartService {
         }
       }
     }
-
-    // Delete guest cart
+    // Delete the guest cart after successful merge
+    await this.db.client.from('cart_items').delete().eq('cart_id', guestCart.id);
     await this.db.client.from('carts').delete().eq('id', guestCart.id);
+
     return this.getCart(userId);
   }
 }
