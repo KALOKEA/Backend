@@ -199,6 +199,7 @@ export class EmailService {
       payment_method?: string;
     };
     invoice_html?: string; // attached as the tax invoice
+    guest_email?: string;  // appended to invoice link so guest can view without auth
   }): Promise<void> {
     const rows = (vars.items || [])
       .map(
@@ -237,7 +238,7 @@ export class EmailService {
     const backendUrl = this.config.get('BACKEND_URL') || 'https://api.kalokea.in';
     const trackLink = `${siteUrl}/account/orders/`;
     const invoiceLink = vars.order_db_id
-      ? `${backendUrl}/orders/${vars.order_db_id}/invoice`
+      ? `${backendUrl}/orders/${vars.order_db_id}/invoice${vars.guest_email ? `?guest_email=${encodeURIComponent(vars.guest_email)}` : ''}`
       : null;
 
     const addr = vars.address;

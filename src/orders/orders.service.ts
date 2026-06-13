@@ -505,6 +505,7 @@ export class OrdersService {
           payment_method: order.payment_method === 'cod' ? 'Cash on Delivery' : 'Razorpay (prepaid)',
         },
         invoice_html: invoiceHtml,
+        guest_email: order.guest_email || undefined,
       });
     }
 
@@ -594,32 +595,48 @@ export class OrdersService {
       }
     }
 
-    // Trigger Razorpay refund if order was paid online
+    // Trigger Razorpay refund if order was paid online.
+    // Atomic idempotency guard: the conditional UPDATE to 'refund_pending' only succeeds
+    // once even under concurrent requests — prevents double-refund race condition.
     if (order.payment_status === 'paid' && order.payment_method !== 'cod' && order.razorpay_payment_id) {
-      const keyId = this.config.get<string>('RAZORPAY_KEY_ID');
-      const keySecret = this.config.get<string>('RAZORPAY_KEY_SECRET');
-      if (keyId && keySecret) {
-        const refundRes = await fetch(
-          `https://api.razorpay.com/v1/payments/${order.razorpay_payment_id}/refund`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
+      const { data: guardRow } = await this.db.client
+        .from('orders')
+        .update({ payment_status: 'refund_pending' })
+        .eq('id', id)
+        .eq('payment_status', 'paid') // only one concurrent call wins
+        .select('id')
+        .single();
+
+      if (guardRow?.id) {
+        // Won the race — proceed with the actual Razorpay refund
+        const keyId = this.config.get<string>('RAZORPAY_KEY_ID');
+        const keySecret = this.config.get<string>('RAZORPAY_KEY_SECRET');
+        if (keyId && keySecret) {
+          const refundRes = await fetch(
+            `https://api.razorpay.com/v1/payments/${order.razorpay_payment_id}/refund`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
+              },
+              body: JSON.stringify({ amount: Math.round(order.total) }),
             },
-            body: JSON.stringify({ amount: Math.round(order.total) }),
-          },
-        );
-        const refundResult: any = await refundRes.json();
-        if (!refundRes.ok) {
-          this.logger.error(`Razorpay refund failed on cancel: ${JSON.stringify(refundResult)}`);
-        } else {
-          await this.db.client
-            .from('orders')
-            .update({ payment_status: 'refunded' })
-            .eq('id', id);
+          );
+          const refundResult: any = await refundRes.json();
+          if (!refundRes.ok) {
+            this.logger.error(`Razorpay refund failed on cancel: ${JSON.stringify(refundResult)}`);
+            // Revert guard so admin can retry; don't leave order stuck in 'refund_pending'
+            await this.db.client.from('orders').update({ payment_status: 'paid' }).eq('id', id);
+          } else {
+            await this.db.client
+              .from('orders')
+              .update({ payment_status: 'refunded' })
+              .eq('id', id);
+          }
         }
       }
+      // If guardRow is null, another concurrent call already claimed the refund — skip
     }
 
     // Send cancellation email

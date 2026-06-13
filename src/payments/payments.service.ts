@@ -348,6 +348,17 @@ export class PaymentsService {
             .eq('order_id', failedOrder.id),
         ).catch(() => {});
       }
+
+      // Send payment failure email to customer
+      const failedTo = failedOrder?.guest_email || (failedOrder?.users as any)?.email;
+      const failedName = (failedOrder?.users as any)?.name || 'Customer';
+      if (failedTo && failedOrder) {
+        this.email.sendPaymentFailed(failedTo, {
+          customer_name: failedName,
+          order_id: failedOrder.order_number,
+          amount: payment.amount,
+        }).catch(() => {});
+      }
     }
 
     return { received: true };
