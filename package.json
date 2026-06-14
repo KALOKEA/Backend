@@ -58,8 +58,7 @@
     "rxjs": "^7.8.0",
     "speakeasy": "^2.0.0",
     "typescript": "^5.0.0",
-    "ws": "^8.21.0",
-    "@keyv/redis": "^4.3.0"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@nestjs/testing": "^10.0.0",
