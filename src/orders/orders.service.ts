@@ -777,25 +777,47 @@ export class OrdersService {
       }
 
       if (order.payment_status === 'paid' && order.payment_method !== 'cod' && order.razorpay_payment_id) {
-        const keyId = this.config.get<string>('RAZORPAY_KEY_ID');
-        const keySecret = this.config.get<string>('RAZORPAY_KEY_SECRET');
-        if (keyId && keySecret) {
-          const refundRes = await fetch(
-            `https://api.razorpay.com/v1/payments/${order.razorpay_payment_id}/refund`,
-            {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
+        // Atomic race guard: only the first concurrent admin cancel call wins.
+        // The UPDATE only executes when payment_status is still 'paid'; if two
+        // concurrent requests race, one gets rowCount=0 and skips the refund.
+        const { data: guardRow, error: guardErr } = await this.db.client
+          .from('orders')
+          .update({ payment_status: 'refund_pending' })
+          .eq('id', id)
+          .eq('payment_status', 'paid') // wins only when still 'paid'
+          .select('id')
+          .maybeSingle();
+
+        if (guardErr) {
+          this.logger.error(`Admin cancel race guard DB error: ${guardErr.message}`);
+        } else if (!guardRow) {
+          this.logger.warn(`Admin cancel: order ${id} payment_status is no longer 'paid' — refund already in flight or processed`);
+        } else {
+          const keyId = this.config.get<string>('RAZORPAY_KEY_ID');
+          const keySecret = this.config.get<string>('RAZORPAY_KEY_SECRET');
+          if (keyId && keySecret) {
+            const refundRes = await fetch(
+              `https://api.razorpay.com/v1/payments/${order.razorpay_payment_id}/refund`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
+                },
+                body: JSON.stringify({ amount: Math.round(order.total) }),
               },
-              body: JSON.stringify({ amount: Math.round(order.total) }),
-            },
-          );
-          const refundResult: any = await refundRes.json();
-          if (!refundRes.ok) {
-            this.logger.error(`Admin cancel Razorpay refund failed: ${JSON.stringify(refundResult)}`);
+            );
+            const refundResult: any = await refundRes.json();
+            if (!refundRes.ok) {
+              this.logger.error(`Admin cancel Razorpay refund failed: ${JSON.stringify(refundResult)}`);
+              // Revert guard so admin can retry
+              await this.db.client.from('orders').update({ payment_status: 'paid' }).eq('id', id);
+            } else {
+              await this.db.client.from('orders').update({ payment_status: 'refunded' }).eq('id', id);
+            }
           } else {
-            await this.db.client.from('orders').update({ payment_status: 'refunded' }).eq('id', id);
+            // No Razorpay keys configured — revert guard
+            await this.db.client.from('orders').update({ payment_status: 'paid' }).eq('id', id);
           }
         }
       }

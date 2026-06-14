@@ -23,7 +23,7 @@ const FEATURE = [
   'ALLOWED_ORIGINS', // CORS allowlist (comma-separated origins)
   'RAZORPAY_KEY_ID',
   'RAZORPAY_KEY_SECRET',
-  'BREVO_API_KEY',
+  'BREVO_API_KEY',         // REQUIRED for any emails — warnings fire if missing
   'CLOUDINARY_CLOUD_NAME',
   'CLOUDINARY_API_KEY',
   'CLOUDINARY_API_SECRET',
@@ -69,6 +69,28 @@ export function validate(config: Record<string, unknown>) {
     console.warn(
       `[env] Optional/feature env vars not set: ${missingFeature.join(', ')}. ` +
         `Related features (payments, email, image upload, CORS) may be disabled or fail.`,
+    );
+  }
+
+  // Warn loudly if Swagger is accidentally enabled in production.
+  // Swagger exposes full API schema — it must never be on in production.
+  if (
+    String(config['SWAGGER_ENABLED'] || '').toLowerCase() === 'true' &&
+    String(config['NODE_ENV'] || '').toLowerCase() === 'production'
+  ) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[env] WARNING: SWAGGER_ENABLED=true in NODE_ENV=production — ' +
+        'full API schema is publicly exposed at /api/docs. Set SWAGGER_ENABLED=false to secure.',
+    );
+  }
+
+  // Warn if BREVO_API_KEY is missing — emails will silently fail on every order.
+  if (!config['BREVO_API_KEY'] || String(config['BREVO_API_KEY']).trim() === '') {
+    // eslint-disable-next-line no-console
+    console.warn(
+      '[env] WARNING: BREVO_API_KEY is not set. All transactional emails ' +
+        '(OTP, order confirmation, shipping) will silently fail.',
     );
   }
 

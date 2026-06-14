@@ -59,7 +59,7 @@ export class EmailService {
 
   /**
    * Branded, email-client-safe shell (table layout + inline styles so it renders
-   * consistently in Gmail/Outlook). Brand: black header, rose accent (#c8a4a5),
+   * consistently in Gmail/Outlook). Brand: black header, sienna accent (#7C4A2D),
    * cream surfaces. `preheader` is the hidden inbox-preview snippet.
    */
   private layout(opts: { preheader?: string; eyebrow?: string; heading: string; body: string; footerNote?: string }): string {
@@ -78,10 +78,10 @@ export class EmailService {
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border:1px solid #e8e4e0;border-radius:8px;overflow:hidden;">
         <tr><td style="background:#0a0a0a;padding:26px 32px;text-align:center;">
           <span style="font-family:Georgia,'Times New Roman',serif;font-size:24px;letter-spacing:7px;color:#ffffff;">KALOKEA</span>
-          <div style="font-family:Arial,Helvetica,sans-serif;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#c8a4a5;margin-top:4px;">Women&rsquo;s Fashion</div>
+          <div style="font-family:Arial,Helvetica,sans-serif;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#7C4A2D;margin-top:4px;">Women&rsquo;s Fashion</div>
         </td></tr>
         <tr><td style="padding:38px 32px 34px;font-family:Arial,Helvetica,sans-serif;color:#0a0a0a;">
-          ${opts.eyebrow ? `<p style="margin:0 0 10px;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#c8a4a5;">${opts.eyebrow}</p>` : ''}
+          ${opts.eyebrow ? `<p style="margin:0 0 10px;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#7C4A2D;">${opts.eyebrow}</p>` : ''}
           <h1 style="margin:0 0 18px;font-family:Georgia,'Times New Roman',serif;font-size:23px;font-weight:normal;line-height:1.3;color:#0a0a0a;">${opts.heading}</h1>
           ${opts.body}
         </td></tr>
@@ -407,7 +407,7 @@ export class EmailService {
       heading: 'You&rsquo;re on the list',
       body,
       // Legally required unsubscribe link (CAN-SPAM / DPDP Act 2023)
-      footerNote: `Not interested? <a href="${unsubUrl}" style="color:#c8a4a5;text-decoration:underline;">Unsubscribe</a> at any time.`,
+      footerNote: `Not interested? <a href="${unsubUrl}" style="color:#7C4A2D;text-decoration:underline;">Unsubscribe</a> at any time.`,
     });
     await this.send(to, 'Welcome to Kalokea', html, undefined, 'newsletter_welcome');
   }
@@ -420,7 +420,7 @@ export class EmailService {
       eyebrow: 'Newsletter',
       heading: subject,
       body: bodyHtml,
-      footerNote: `Not interested? <a href="${unsubUrl}" style="color:#c8a4a5;text-decoration:underline;">Unsubscribe</a> at any time.`,
+      footerNote: `Not interested? <a href="${unsubUrl}" style="color:#7C4A2D;text-decoration:underline;">Unsubscribe</a> at any time.`,
     });
     await this.send(to, subject, html, undefined, 'newsletter_campaign');
   }
@@ -464,7 +464,7 @@ export class EmailService {
       eyebrow: 'Back in Stock',
       heading: 'Your item is available again',
       body,
-      footerNote: `You requested this alert. <a href="${unsubUrl}" style="color:#c8a4a5;text-decoration:underline;">Unsubscribe</a>`,
+      footerNote: `You requested this alert. <a href="${unsubUrl}" style="color:#7C4A2D;text-decoration:underline;">Unsubscribe</a>`,
     });
     await this.send(to, `Back in stock: ${vars.productName}`, html, undefined, 'back_in_stock');
   }
@@ -900,7 +900,7 @@ export class EmailService {
       heading: 'You left something behind',
       body,
       // DPDPA compliance: marketing emails must include a one-click unsubscribe link
-      footerNote: `You received this because you have items in your cart. <a href="${unsubUrl}" style="color:#c8a4a5;text-decoration:underline;">Unsubscribe</a>`,
+      footerNote: `You received this because you have items in your cart. <a href="${unsubUrl}" style="color:#7C4A2D;text-decoration:underline;">Unsubscribe</a>`,
     });
     await this.send(to, 'Your Kalokea cart is waiting', html, undefined, 'abandoned_cart');
   }
