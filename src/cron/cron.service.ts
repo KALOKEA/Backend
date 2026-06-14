@@ -211,6 +211,7 @@ export class CronService {
             recipient: user.email,
             email_type: 'abandoned_cart',
             subject: 'You left something behind',
+            status: 'sent',
           });
           if (logErr) {
             this.logger.warn(`email_log insert failed for ${user.email}: ${logErr.message}`);

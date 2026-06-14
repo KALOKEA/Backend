@@ -8,7 +8,7 @@ export class TwoFactorService {
   constructor(private db: DatabaseService) {}
 
   /** Generate a new TOTP secret + QR code for the user. Does NOT enable 2FA yet. */
-  async setup(userId: string, email: string): Promise<{ qr_code: string; secret: string; backup_codes: string[] }> {
+  async setup(userId: string, email: string): Promise<{ qr_code: string; secret: string }> {
     const secret = speakeasy.generateSecret({
       name: `KALOKEA Admin (${email})`,
       issuer: 'KALOKEA',
@@ -25,12 +25,7 @@ export class TwoFactorService {
     // Generate QR code as data URL
     const qr = await QRCode.toDataURL(secret.otpauth_url || '');
 
-    // Generate 8 backup codes (one-time use)
-    const backup_codes = Array.from({ length: 8 }, () =>
-      Math.random().toString(36).slice(2, 8).toUpperCase()
-    );
-
-    return { qr_code: qr, secret: secret.base32, backup_codes };
+    return { qr_code: qr, secret: secret.base32 };
   }
 
   /** Verify a TOTP token and enable 2FA if valid. */

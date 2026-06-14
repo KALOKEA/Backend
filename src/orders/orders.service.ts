@@ -835,12 +835,6 @@ export class OrdersService {
   }
 
   /**
-   * Printable HTML tax invoice. GST is EXCLUSIVE and read from the order's
-   * persisted snapshot (taxable_value / cgst / sgst / igst / total_gst), so a
-   * historical invoice never changes if the store rate later changes. Seller
-   * details come from admin Settings. Ownership enforced (customer = own only).
-   */
-  /**
    * Public guest order tracking — returns minimal order status data.
    * Requires order_number + the email used at checkout to prove ownership.
    */

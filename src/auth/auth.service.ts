@@ -263,7 +263,7 @@ export class AuthService {
       .from('users')
       .select('id, name, email, phone, role, created_at')
       .eq('id', userId)
-      .single();
+      .maybeSingle();
     return user;
   }
 }
