@@ -1,4 +1,4 @@
-import { Controller, Get, Query, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Query, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { GstService } from './gst.service';
 import { AdminGuard } from '../common/guards/admin.guard';
@@ -48,6 +48,16 @@ export class GstController {
   ) {
     const csv = await this.gst.exportSummaryCsv({ from, to });
     this.sendCsv(res, `gst-summary${this.suffix(from, to)}.csv`, csv);
+  }
+
+  /** GSTR-1 Section 12 — HSN-wise monthly summary. month = 'YYYY-MM' */
+  @Get('export/gstr1/:month')
+  async exportGstr1(
+    @Res() res: Response,
+    @Param('month') month: string,
+  ) {
+    const csv = await this.gst.exportGstr1Monthly(month);
+    this.sendCsv(res, `GSTR1-HSN-${month}.csv`, csv);
   }
 
   private suffix(from?: string, to?: string): string {

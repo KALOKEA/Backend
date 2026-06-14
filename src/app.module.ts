@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { CacheModule } from '@nestjs/cache-manager';
 import { AdminAuditInterceptor } from './common/interceptors/admin-audit.interceptor';
@@ -46,8 +46,26 @@ import { validate } from './config/env.validation';
     ConfigModule.forRoot({ isGlobal: true, validate }),
     ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
-    // ── In-memory cache (60 s TTL) — upgrade to Redis by setting REDIS_URL env var
-    CacheModule.register({ isGlobal: true, ttl: 60000, max: 500 }),
+    // ── Cache: in-memory by default; Redis when REDIS_URL env var is set.
+    // To enable Redis: set REDIS_URL=redis://... in Railway environment.
+    // Install: npm install @keyv/redis (already in package.json)
+    CacheModule.registerAsync({
+      isGlobal: true,
+      inject: [ConfigService],
+      useFactory: async (config: ConfigService) => {
+        const redisUrl = config.get<string>('REDIS_URL');
+        if (redisUrl) {
+          try {
+            // eslint-disable-next-line @typescript-eslint/no-var-requires, @typescript-eslint/no-explicit-any
+            const { createKeyv } = require('@keyv/redis') as any;
+            return { stores: [createKeyv(redisUrl)], ttl: 60_000 };
+          } catch {
+            // @keyv/redis not installed — fall back to in-memory cache
+          }
+        }
+        return { ttl: 60_000, max: 500 };
+      },
+    }),
     DatabaseModule,
     EmailModule,
     HealthModule,

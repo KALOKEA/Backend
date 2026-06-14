@@ -41,6 +41,19 @@ export class AuthService {
       throw new BadRequestException('OTP already sent. Please wait 60 seconds before requesting a new code.');
     }
 
+    // Hourly cap: max 5 OTPs per identifier per hour. Guards against sustained
+    // flooding that rotates around the 60 s cooldown (e.g. automated script
+    // waiting exactly 61 s between requests). Independent of per-IP throttling.
+    const hourThreshold = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count: hourlyCount } = await this.db.client
+      .from('otp_sessions')
+      .select('id', { count: 'exact', head: true })
+      .eq('identifier', identifier)
+      .gt('created_at', hourThreshold);
+    if ((hourlyCount ?? 0) >= 5) {
+      throw new BadRequestException('Too many OTP requests. Please try again in an hour.');
+    }
+
     const otp = randomInt(100000, 1000000).toString();
     const otp_hash = await bcrypt.hash(otp, 10);
     const expires_at = new Date(Date.now() + 5 * 60 * 1000).toISOString();

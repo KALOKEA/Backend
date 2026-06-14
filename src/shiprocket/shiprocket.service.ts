@@ -317,14 +317,26 @@ export class ShiprocketService {
     );
   }
 
-  // ─── Webhook handler ─────────────────────────────────────────────────────────
+  // ─── Webhook handler (forward + reverse logistics) ───────────────────────────
 
   async handleWebhook(payload: any): Promise<void> {
     const awb    = payload?.awb || payload?.AWB;
     const status = payload?.current_status;
     if (!awb || !status) return;
 
-    // Map ShipRocket status to our order status
+    // ── Try reverse logistics first (return_awb_code column) ──────────────────
+    const { data: returnRow } = await this.db.client
+      .from('returns')
+      .select('id, order_id, status')
+      .eq('return_awb', awb)
+      .maybeSingle();
+
+    if (returnRow) {
+      await this.handleReverseWebhook(returnRow, awb, status);
+      return;
+    }
+
+    // ── Forward shipment ───────────────────────────────────────────────────────
     const statusMap: Record<string, string> = {
       'Shipped':           'shipped',
       'Out For Delivery':  'shipped',
@@ -361,6 +373,64 @@ export class ShiprocketService {
     } else {
       this.logger.log(`Webhook: order ${order.id} status="${status}" (our: ${ourStatus || 'no change'})`);
     }
+  }
+
+  // ─── Reverse logistics webhook handler ───────────────────────────────────────
+
+  private async handleReverseWebhook(ret: { id: string; order_id: string; status: string }, awb: string, srStatus: string): Promise<void> {
+    // Map ShipRocket reverse shipment statuses to our return statuses
+    const reverseMap: Record<string, string> = {
+      'Pickup Scheduled':        'pickup_scheduled',
+      'Pickup Generated':        'pickup_scheduled',
+      'Picked Up':               'picked_up',
+      'In Transit':              'in_transit',
+      'Delivered':               'received',  // Return delivered to our warehouse
+      'Out For Pickup':          'pickup_scheduled',
+      'Cancelled':               'pickup_failed',
+      'Pickup Error':            'pickup_failed',
+      'RTO':                     'pickup_failed',
+    };
+    const newReturnStatus = reverseMap[srStatus];
+
+    this.logger.log(`Reverse webhook: return ${ret.id} AWB=${awb} status="${srStatus}" → "${newReturnStatus || 'unknown'}"`);
+
+    if (newReturnStatus && ret.status !== newReturnStatus) {
+      const { error } = await this.db.client
+        .from('returns')
+        .update({ status: newReturnStatus, shiprocket_reverse_status: srStatus })
+        .eq('id', ret.id);
+      if (error) {
+        this.logger.error(`Reverse webhook: failed to update return ${ret.id}: ${error.message}`);
+        return;
+      }
+
+      // When return reaches warehouse — restock the item automatically
+      if (newReturnStatus === 'received') {
+        await this.restockFromReturn(ret.id, ret.order_id);
+      }
+    }
+  }
+
+  // ─── Restock on return received ───────────────────────────────────────────────
+
+  private async restockFromReturn(returnId: string, orderId: string): Promise<void> {
+    const { data: ret } = await this.db.client
+      .from('returns')
+      .select('order_item_id, quantity')
+      .eq('id', returnId)
+      .single();
+    if (!ret) return;
+
+    const { data: item } = await this.db.client
+      .from('order_items')
+      .select('variant_id, quantity')
+      .eq('id', ret.order_item_id)
+      .single();
+    if (!item) return;
+
+    const qty = ret.quantity || item.quantity;
+    await this.db.client.rpc('restock_variant', { p_variant_id: item.variant_id, p_qty: qty });
+    this.logger.log(`Restocked variant ${item.variant_id} ×${qty} from return ${returnId}`);
   }
 
   // ─── Manifest generation ─────────────────────────────────────────────────────
@@ -494,10 +564,21 @@ export class ShiprocketService {
       length: 20, breadth: 15, height: 5, weight: 0.5,
     };
 
-    return this.srFetch('/orders/return', {
+    const data = await this.srFetch('/orders/return', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+
+    // Store the return AWB so reverse-logistics webhooks can be matched back
+    const returnAwb = data?.shipment_id || data?.awb_code;
+    if (returnAwb) {
+      await this.db.client
+        .from('returns')
+        .update({ return_awb: returnAwb, shiprocket_reverse_status: 'Pickup Generated' })
+        .eq('order_id', orderId)
+        .in('status', ['approved', 'pickup_scheduled']);
+    }
+    return data;
   }
 
   // ─── COD remittance ──────────────────────────────────────────────────────────

@@ -169,3 +169,51 @@ describe('CouponsService', () => {
     expect(result.discount).toBe(order_value); // capped
   });
 });
+
+// ─── redeem() — atomic RPC ───────────────────────────────────────────────────
+
+describe('CouponsService.redeem()', () => {
+  async function makeServiceWithRpc(rpcReturn: { data: any; error: any }) {
+    const rpcMock = jest.fn().mockResolvedValue(rpcReturn);
+    const db: any = {
+      client: {
+        rpc: rpcMock,
+        from: jest.fn(),
+      },
+    };
+    const module = await Test.createTestingModule({
+      providers: [
+        CouponsService,
+        { provide: DatabaseService, useValue: db },
+      ],
+    }).compile();
+    return { service: module.get<CouponsService>(CouponsService), rpcMock };
+  }
+
+  it('calls redeem_coupon RPC with correct args for registered user', async () => {
+    const { service, rpcMock } = await makeServiceWithRpc({ data: true, error: null });
+    await service.redeem('coupon-1', 'order-1', 'user-abc', undefined);
+    expect(rpcMock).toHaveBeenCalledWith('redeem_coupon', {
+      p_coupon_id: 'coupon-1',
+      p_order_id: 'order-1',
+      p_user_id: 'user-abc',
+      p_guest_email: null,
+    });
+  });
+
+  it('calls redeem_coupon RPC with guest_email lowercased', async () => {
+    const { service, rpcMock } = await makeServiceWithRpc({ data: true, error: null });
+    await service.redeem('coupon-2', 'order-2', undefined, 'Guest@Test.COM');
+    expect(rpcMock).toHaveBeenCalledWith('redeem_coupon', expect.objectContaining({
+      p_guest_email: 'guest@test.com',
+      p_user_id: null,
+    }));
+  });
+
+  it('does NOT throw when RPC returns false (concurrent race — order already placed, log only)', async () => {
+    // Concurrent winner claimed the last use; we log a warning but do NOT
+    // throw — rolling back the already-placed order is worse than the discrepancy.
+    const { service } = await makeServiceWithRpc({ data: false, error: null });
+    await expect(service.redeem('coupon-3', 'order-3', 'user-x')).resolves.not.toThrow();
+  });
+});

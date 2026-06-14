@@ -376,6 +376,99 @@ export class GstService {
     return this.toCsv([header, ...lines]);
   }
 
+
+  /**
+   * GSTR-1 monthly HSN-wise summary (Section 12 — HSN Summary of Outward Supplies).
+   * Format: HSN Code | Description | UOM | Total Qty | Taxable Value |
+   *         Integrated Tax | Central Tax | State/UT Tax | Cess
+   * month: "YYYY-MM" e.g. "2026-05"
+   */
+  async exportGstr1Monthly(month: string): Promise<string> {
+    // Parse month → date range in IST
+    const [year, mon] = month.split('-').map(Number);
+    if (!year || !mon || mon < 1 || mon > 12) {
+      throw new Error(`Invalid month format: "${month}" — use YYYY-MM`);
+    }
+    const from = new Date(`${month}-01T00:00:00+05:30`).toISOString();
+    const toDate = new Date(year, mon, 1); // first day of NEXT month (UTC)
+    const to   = new Date(`${toDate.getFullYear()}-${String(toDate.getMonth() + 1).padStart(2, '0')}-01T00:00:00+05:30`).toISOString();
+
+    // Fetch only 'sale' type rows (net — returns are separate GSTR-1 amendment)
+    let q = this.db.client
+      .from('gst_ledger')
+      .select('hsn_code, description, gst_rate, taxable_value, cgst, sgst, igst, quantity')
+      .eq('txn_type', 'sale')
+      .gte('txn_date', from)
+      .lt('txn_date', to);
+    const { data, error } = await q;
+    if (error) throw error;
+    const rows = data || [];
+
+    // Aggregate by HSN + GST rate
+    const map = new Map<string, {
+      hsn: string; desc: string; rate: number;
+      qty: number; taxable: number; igst: number; cgst: number; sgst: number;
+    }>();
+    for (const r of rows) {
+      const key = `${r.hsn_code || 'UNKNOWN'}|${r.gst_rate || 0}`;
+      const existing = map.get(key);
+      if (existing) {
+        existing.qty     += Number(r.quantity)       || 0;
+        existing.taxable += Number(r.taxable_value)  || 0;
+        existing.igst    += Number(r.igst)            || 0;
+        existing.cgst    += Number(r.cgst)            || 0;
+        existing.sgst    += Number(r.sgst)            || 0;
+      } else {
+        map.set(key, {
+          hsn:     r.hsn_code    || 'UNKNOWN',
+          desc:    r.description || '',
+          rate:    Number(r.gst_rate)    || 0,
+          qty:     Number(r.quantity)    || 0,
+          taxable: Number(r.taxable_value) || 0,
+          igst:    Number(r.igst)          || 0,
+          cgst:    Number(r.cgst)          || 0,
+          sgst:    Number(r.sgst)          || 0,
+        });
+      }
+    }
+
+    const sortedRows = [...map.values()].sort((a, b) => a.hsn.localeCompare(b.hsn));
+    const header = [
+      'Period', 'HSN Code', 'Description', 'UOM', 'Total Qty',
+      'GST Rate %', 'Taxable Value (₹)', 'Integrated Tax (₹)',
+      'Central Tax (₹)', 'State/UT Tax (₹)', 'Cess (₹)',
+    ];
+    const lines = sortedRows.map(r => [
+      month,
+      r.hsn,
+      r.desc,
+      'NOS',          // Unit of Measure — garments are "Numbers"
+      r.qty,
+      r.rate,
+      this.rupees(r.taxable),
+      this.rupees(r.igst),
+      this.rupees(r.cgst),
+      this.rupees(r.sgst),
+      '0.00',         // No cess on garments
+    ]);
+
+    // Grand total row
+    const tot = sortedRows.reduce(
+      (s, r) => ({
+        qty: s.qty + r.qty,
+        taxable: s.taxable + r.taxable,
+        igst: s.igst + r.igst,
+        cgst: s.cgst + r.cgst,
+        sgst: s.sgst + r.sgst,
+      }),
+      { qty: 0, taxable: 0, igst: 0, cgst: 0, sgst: 0 },
+    );
+    lines.push([month, 'TOTAL', '', 'NOS', tot.qty, '',
+      this.rupees(tot.taxable), this.rupees(tot.igst), this.rupees(tot.cgst), this.rupees(tot.sgst), '0.00']);
+
+    return this.toCsv([header, ...lines]);
+  }
+
   // ── small utils ──
   private rupees(paise: any): string {
     return ((Number(paise) || 0) / 100).toFixed(2);
