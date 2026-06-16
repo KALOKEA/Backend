@@ -57,9 +57,13 @@ export class SettingsService {
   async get(): Promise<StoreSettings> {
     const { data } = await this.db.client
       .from('store_settings').select('*').eq('id', 1).maybeSingle();
+    // Strip DB meta-fields (id, updated_at) — they are not part of StoreSettings
+    // and would cause "property X should not exist" errors if echoed back to PUT /settings.
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { id: _id, updated_at: _ua, ...rest } = (data || {}) as any;
     return {
       ...DEFAULTS,
-      ...(data || {}),
+      ...rest,
       gst_rate: Number(data?.gst_rate ?? DEFAULTS.gst_rate),
       shipping_fee: Number(data?.shipping_fee ?? DEFAULTS.shipping_fee),
       shipping_free_threshold: Number(data?.shipping_free_threshold ?? DEFAULTS.shipping_free_threshold),
@@ -105,13 +109,4 @@ export class SettingsService {
       rows++;
       grossSales += Number(row.gross) || 0;
       netValue   += Number(row.taxable_value) || 0;
-      totalGst   += Number(row.total_gst) || 0;
-      cgst       += Number(row.cgst) || 0;
-      sgst       += Number(row.sgst) || 0;
-      igst       += Number(row.igst) || 0;
-    }
-
-    return { period: m, gst_rate: rate, ledger_rows: rows, gross_sales: grossSales,
-             net_value: netValue, total_gst: totalGst, cgst, sgst, igst };
-  }
-}
+      totalGst   += Number(row.total_gst) |

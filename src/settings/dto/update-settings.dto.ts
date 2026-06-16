@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsNumber, IsBoolean, Min, Max, IsEmail } from 'class-validator';
+import { IsOptional, IsString, IsNumber, IsBoolean, Min, Max, IsEmail, ValidateIf } from 'class-validator';
 
 export class UpdateSettingsDto {
   @IsOptional() @IsString() seller_name?: string;
@@ -6,7 +6,8 @@ export class UpdateSettingsDto {
   @IsOptional() @IsString() seller_gstin?: string;
   @IsOptional() @IsString() seller_state?: string;
   @IsOptional() @IsNumber() @Min(0) @Max(28) gst_rate?: number;
-  @IsOptional() @IsEmail() admin_email?: string;
+  // Allow empty string (admin cleared the field) — @IsEmail only fires when non-empty.
+  @IsOptional() @ValidateIf(o => !!o.admin_email) @IsEmail() admin_email?: string;
 
   /** Shipping fee in paise (e.g. 4900 = ₹49). Set 0 for always-free. */
   @IsOptional() @IsNumber() @Min(0) shipping_fee?: number;
@@ -40,8 +41,4 @@ export class UpdateSettingsDto {
   @IsOptional() @IsString() flash_sale_label?: string;
 
   /** Discount percentage shown in the banner (informational only — coupon handles actual discount). */
-  @IsOptional() @IsNumber() @Min(1) @Max(90) flash_sale_discount_pct?: number;
-
-  /** Coupon code shoppers copy from the banner (optional). */
-  @IsOptional() @IsString() flash_sale_coupon?: string;
-}
+  @IsOptional() @IsNumber() @Min(1) @Max(90) flash_sale_discount_
