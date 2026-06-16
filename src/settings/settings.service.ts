@@ -109,4 +109,13 @@ export class SettingsService {
       rows++;
       grossSales += Number(row.gross) || 0;
       netValue   += Number(row.taxable_value) || 0;
-      totalGst   += Number(row.total_gst) |
+      totalGst   += Number(row.total_gst) || 0;
+      cgst       += Number(row.cgst) || 0;
+      sgst       += Number(row.sgst) || 0;
+      igst       += Number(row.igst) || 0;
+    }
+
+    return { period: m, gst_rate: rate, ledger_rows: rows, gross_sales: grossSales,
+             net_value: netValue, total_gst: totalGst, cgst, sgst, igst };
+  }
+}

@@ -41,4 +41,8 @@ export class UpdateSettingsDto {
   @IsOptional() @IsString() flash_sale_label?: string;
 
   /** Discount percentage shown in the banner (informational only — coupon handles actual discount). */
-  @IsOptional() @IsNumber() @Min(1) @Max(90) flash_sale_discount_
+  @IsOptional() @IsNumber() @Min(1) @Max(90) flash_sale_discount_pct?: number;
+
+  /** Coupon code shoppers copy from the banner (optional). */
+  @IsOptional() @IsString() flash_sale_coupon?: string;
+}
