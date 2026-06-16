@@ -60,7 +60,7 @@ export class SettingsService {
     return {
       ...DEFAULTS,
       ...(data || {}),
-      gst_rate: Number(data?.gst_rate ?? DEFAULTS.gst_rate),
+      gst_rate: Number(data?.gst_rate) || DEFAULTS.gst_rate,
       shipping_fee: Number(data?.shipping_fee ?? DEFAULTS.shipping_fee),
       shipping_free_threshold: Number(data?.shipping_free_threshold ?? DEFAULTS.shipping_free_threshold),
       cod_fee: Number(data?.cod_fee ?? DEFAULTS.cod_fee),
