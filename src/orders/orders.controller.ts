@@ -3,6 +3,7 @@ import { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { QuoteOrderDto } from './dto/quote-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
@@ -34,8 +35,8 @@ export class OrdersController {
   @Public()
   @UseGuards(OptionalJwtAuthGuard)
   @Post('quote')
-  quote(@Body() dto: CreateOrderDto, @CurrentUser() user: any) {
-    return this.orders.quote(dto, user?.id);
+  quote(@Body() dto: QuoteOrderDto, @CurrentUser() user: any) {
+    return this.orders.quote(dto as any, user?.id);
   }
 
   @Get('my')
