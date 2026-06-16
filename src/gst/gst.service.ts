@@ -51,6 +51,18 @@ export class GstService {
     return !!s && s === b;
   }
 
+  /**
+   * Indian garment GST slab (HSN 61/62/63 - apparel and clothing accessories).
+   * Notification 01/2017-Central Tax (Rate), Schedule I and II:
+   *   - Per-piece value below Rs 1000 (< 100000 paise) -> 5%
+   *   - Per-piece value Rs 1000 and above (>= 100000 paise) -> 12%
+   *
+   * @param pricePerUnitPaise  Variant price in PAISE (e.g. 111000 = Rs 1110)
+   */
+  garmentSlabRate(pricePerUnitPaise: number): number {
+    return pricePerUnitPaise >= 100_000 ? 12 : 5;
+  }
+
   // ── Ledger writers ───────────────────────────────────────────────────────
 
   /**
@@ -490,7 +502,7 @@ export class GstService {
   private toCsv(rows: (string | number)[][]): string {
     const esc = (v: string | number) => {
       const s = String(v ?? '');
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"`  : s;
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     return rows.map((r) => r.map(esc).join(',')).join('\r\n');
   }

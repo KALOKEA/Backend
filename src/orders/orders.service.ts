@@ -95,7 +95,8 @@ export class OrdersService {
   }) {
     const { cartItems, discount, paymentMethod, buyerState, checkStock, softReservations } = params;
     const settings = await this.settings.get();
-    const defaultRate = Number(settings.gst_rate) || 0;
+    // GST rate is computed per-line below using per-product HSN override or garment price slab.
+    // The store-level settings.gst_rate is not used for rate lookup - for reference only.
     const intraState = this.gst.isIntraState(buyerState, settings.seller_state);
 
     // 1. Pre-tax line subtotals.
@@ -130,7 +131,8 @@ export class OrdersService {
         product,
         quantity: item.quantity,
         lineSubtotal,
-        rate: this.gst.resolveRate(product.gst_rate, defaultRate),
+        // Per-product HSN rate first; fallback = garment slab (5% under Rs999, 12% at Rs1000+).
+        rate: Number(product.gst_rate) > 0 ? Number(product.gst_rate) : this.gst.garmentSlabRate(variant.price),
         hsn_code: product.hsn_code || null,
         primaryImage,
       };
@@ -191,7 +193,6 @@ export class OrdersService {
       cgst,
       sgst,
       igst,
-      gst_rate: defaultRate,
       intraState,
       buyerState: buyerState || null,
       shipping,
