@@ -56,6 +56,11 @@ export class CreateProductDto {
   @IsString()
   video_url?: string;
 
+  /** YouTube embed URL or video ID shown below the product description. */
+  @IsOptional()
+  @IsString()
+  youtube_url?: string;
+
   @IsOptional()
   @IsNumber()
   sort_weight?: number;

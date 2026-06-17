@@ -15,6 +15,8 @@ export class UpdateProductDto {
   @IsOptional() @IsString()  hsn_code?: string;
   @IsOptional() @IsNumber()  gst_rate?: number;
   @IsOptional() @IsString()  video_url?: string;
+  /** YouTube embed URL or video ID shown below the product description. */
+  @IsOptional() @IsString()  youtube_url?: string;
   @IsOptional() @IsNumber()  sort_weight?: number;
   /** Fabric composition and care instructions. */
   @IsOptional() @IsString()  fabric_care?: string;

@@ -10,7 +10,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 const MAX_SIZE_IMAGE = 5 * 1024 * 1024;   // 5 MB
 const MAX_SIZE_MEDIA = 30 * 1024 * 1024;  // 30 MB (covers short videos)
 
-const ALLOWED_FOLDERS = ['products', 'banners', 'categories'] as const;
+const ALLOWED_FOLDERS = ['products', 'banners', 'categories', 'homepage', 'editorial', 'looks'] as const;
 type UploadFolder = (typeof ALLOWED_FOLDERS)[number];
 
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
@@ -96,6 +96,35 @@ export class UploadController {
       ? (rawFolder as UploadFolder)
       : 'products';
     return this.upload.uploadImage(file, folder);
+  }
+
+  /**
+   * Admin-only: upload image OR video for homepage/editorial/hero content.
+   * Accepts JPEG, PNG, WebP, MP4, MOV, WebM (max 100 MB for videos).
+   */
+  @UseGuards(AdminGuard)
+  @Post('admin-media')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB
+      fileFilter: (_req, file, cb) => {
+        const ok = ALLOWED_MEDIA_TYPES.includes(file.mimetype);
+        cb(ok ? null : new BadRequestException('Only images (JPEG/PNG/WebP) or videos (MP4/MOV/WebM) are allowed'), ok);
+      },
+    }),
+  )
+  uploadAdminMedia(
+    @UploadedFile() file: Express.Multer.File,
+    @Query('folder') rawFolder = 'homepage',
+  ) {
+    if (!file) throw new BadRequestException('No file received — field name must be "file"');
+    if (!checkMagicBytes(file.buffer, file.mimetype)) {
+      throw new BadRequestException('File content does not match declared type.');
+    }
+    const folder: UploadFolder = ALLOWED_FOLDERS.includes(rawFolder as UploadFolder)
+      ? (rawFolder as UploadFolder)
+      : 'homepage';
+    return this.upload.uploadMedia(file, folder);
   }
 
   /**
