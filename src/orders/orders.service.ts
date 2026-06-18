@@ -360,7 +360,18 @@ export class OrdersService {
           p_variant_id: item.variant_id,
           p_qty: item.quantity,
         });
-        if (decErr || ok !== true) {
+        // Separate a real DB/RPC failure from a genuine stock shortfall.
+        // Previously both collapsed into "Insufficient stock", so ANY error from
+        // decrement_stock (RPC not migrated, permissions, type mismatch) was shown
+        // to the customer as "out of stock" on COD even when stock was available.
+        if (decErr) {
+          await rollbackStock();
+          this.logger.error(
+            `decrement_stock failed for variant ${item.variant_id} (qty ${item.quantity}): ${decErr.message || decErr}`,
+          );
+          throw new InternalServerErrorException('Could not reserve stock for this order. Please try again.');
+        }
+        if (ok !== true) {
           await rollbackStock();
           throw new BadRequestException(`Insufficient stock for ${item.snapshot_name}`);
         }
@@ -845,16 +856,20 @@ export class OrdersService {
     }
     const { data: order } = await this.db.client
       .from('orders')
-      .select('id, order_number, status, fulfillment_status, payment_status, payment_method, total, created_at, guest_email, awb_code, courier_name, shiprocket_status, order_items(quantity, snapshot_price, snapshot_name, snapshot_size, snapshot_colour)')
+      .select('id, order_number, status, fulfillment_status, payment_status, payment_method, total, created_at, guest_email, awb_code, courier_name, shiprocket_status, users(email), order_items(quantity, snapshot_price, snapshot_name, snapshot_size, snapshot_colour)')
       .eq('order_number', orderNumber.toUpperCase())
       .single();
 
     if (!order) throw new NotFoundException('Order not found');
 
-    // Ownership: email must match guest_email stored at checkout
+    // Ownership: the supplied email must match EITHER the guest email captured at
+    // checkout OR the registered account's email. Registered-user orders store
+    // guest_email = null, so matching only guest_email made every logged-in
+    // customer's order untrackable here ("Order not found").
+    const target = email.toLowerCase();
     const emailMatch =
-      order.guest_email &&
-      order.guest_email.toLowerCase() === email.toLowerCase();
+      (order.guest_email && order.guest_email.toLowerCase() === target) ||
+      (!!(order.users as any)?.email && (order.users as any).email.toLowerCase() === target);
 
     if (!emailMatch) throw new NotFoundException('Order not found');
 

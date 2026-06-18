@@ -112,7 +112,10 @@ export class ReturnsService {
 
     // On final settlement, restock the returned item(s) and post a negative
     // (credit-note) row to the GST ledger so the period's net tax is reduced.
-    if (status === 'completed' || status === 'refunded') {
+    // Guard on the TRANSITION (wasn't already settled) so re-saving a completed
+    // return — e.g. editing admin notes — can't restock the same item twice.
+    const wasSettled = existing?.status === 'completed' || existing?.status === 'refunded';
+    if ((status === 'completed' || status === 'refunded') && !wasSettled) {
       await this.restock(data);
       await this.gst.postReturnLedger(data.id);
     }

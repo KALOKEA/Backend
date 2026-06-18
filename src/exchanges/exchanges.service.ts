@@ -127,6 +127,11 @@ export class ExchangesService {
     if (!['requested', 'approved', 'rejected', 'completed'].includes(status)) {
       throw new BadRequestException('Invalid status');
     }
+    // Read the prior status so the stock swap fires only on the TRANSITION to
+    // completed — re-saving a completed exchange must not move stock twice.
+    const { data: prev } = await this.db.client
+      .from('exchanges').select('status').eq('id', id).single();
+
     const { data, error } = await this.db.client
       .from('exchanges')
       .update({ status, admin_notes: adminNotes, updated_at: new Date().toISOString() })
@@ -135,7 +140,7 @@ export class ExchangesService {
       .single();
     if (error || !data) throw new NotFoundException('Exchange not found');
 
-    if (status === 'completed') {
+    if (status === 'completed' && prev?.status !== 'completed') {
       await this.applyStockSwap(data);
       await this.gst.postExchangeLedger(data.id);
     }

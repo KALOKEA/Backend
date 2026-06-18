@@ -34,7 +34,7 @@ export class AdminGuard implements CanActivate {
       // Strip IPv6-mapped IPv4 prefix (::ffff:1.2.3.4 → 1.2.3.4)
       const normalised = clientIp.replace(/^::ffff:/, '');
       if (!this.allowedIps.includes(normalised)) {
-        this.logger.warn(`Admin access denied for IP ${normalised} (user ${user.sub})`);
+        this.logger.warn(`Admin access denied for IP ${normalised} (user ${user.id})`);
         throw new ForbiddenException('Admin access denied from this network');
       }
     }

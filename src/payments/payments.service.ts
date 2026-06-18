@@ -73,6 +73,10 @@ export class PaymentsService {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Basic ${Buffer.from(`${keyId}:${keySecret}`).toString('base64')}`,
+            // Idempotency: a retry of the SAME refund (after a network blip or a
+            // failed order update below) returns the original refund instead of
+            // creating a second one — prevents accidental double-refunds.
+            'X-Razorpay-Idempotency-Key': `kal_refund_${dto.return_id || order.id}`,
           },
           body: JSON.stringify({ amount: Math.round(amount) }),
         },
@@ -85,9 +89,15 @@ export class PaymentsService {
       method = 'Razorpay';
     }
 
-    await this.db.client.from('orders')
+    const { error: refundUpdateErr } = await this.db.client.from('orders')
       .update({ payment_status: 'refunded', status: 'refunded' })
       .eq('id', order.id);
+    if (refundUpdateErr) {
+      // Money already moved at the gateway; surface the DB failure for reconcile.
+      // The idempotency key above makes a retry of this refund safe (no double pay).
+      this.logger.error(`Refund succeeded at gateway but order ${order.id} not marked refunded: ${refundUpdateErr.message}`);
+      throw new BadRequestException('Refund processed but order status update failed — please retry to reconcile.');
+    }
 
     const to = order.guest_email || (order.users as any)?.email;
     if (to) {
