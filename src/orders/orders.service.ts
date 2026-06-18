@@ -677,7 +677,20 @@ export class OrdersService {
       .order('created_at', { ascending: false })
       .range(from, from + limit - 1);
 
-    if (userId) q = q.eq('user_id', userId);
+    if (userId) {
+      // Match orders tied to this account by user_id OR placed as a guest with the
+      // account's email (e.g. checkout while the access token had expired, or a
+      // guest order made before signing up). Without this, such orders never show
+      // in "My Orders" even though they belong to the customer.
+      const { data: u } = await this.db.client
+        .from('users').select('email').eq('id', userId).maybeSingle();
+      const email = u?.email;
+      // Quote the email value — it contains '.' and '@', which PostgREST's .or()
+      // parser would otherwise treat as operator separators.
+      q = email
+        ? q.or(`user_id.eq.${userId},guest_email.eq."${email}"`)
+        : q.eq('user_id', userId);
+    }
     if (status) q = q.eq('status', status);
     if (search) {
       const s = search.replace(/'/g, "''"); // escape single quotes
