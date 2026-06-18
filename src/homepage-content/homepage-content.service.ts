@@ -26,8 +26,15 @@ export class HomepageContentService {
     cms: Record<string, string>;
     categories: any[];
     featured_products: any[];
+    bestsellers: any[];
   }> {
-    const [cmsResult, catsResult, prodsResult] = await Promise.all([
+    // Shared product projection — keep featured + bestseller selects identical.
+    const productSelect = `
+          id, name, slug, base_price, compare_price, is_featured, tags,
+          product_images(url, alt_text, is_primary, sort_order),
+          categories(name, slug)
+        `;
+    const [cmsResult, catsResult, prodsResult, bestResult] = await Promise.all([
       this.db.client.from('homepage_content').select('key, value'),
       this.db.client
         .from('categories')
@@ -36,16 +43,21 @@ export class HomepageContentService {
         .not('slug', 'in', '("new-arrivals","everything","sale")')
         .order('sort_order', { ascending: true })
         .limit(6),
+      // Featured = 8 newest active products.
       this.db.client
         .from('products')
-        .select(`
-          id, name, slug, base_price, compare_price, is_featured, tags,
-          product_images(url, alt_text, is_primary, sort_order),
-          categories(name, slug)
-        `)
+        .select(productSelect)
         .eq('is_active', true)
         .order('created_at', { ascending: false })
         .limit(8),
+      // Bestsellers = admin-promoted (sort_weight) first, then newest.
+      this.db.client
+        .from('products')
+        .select(productSelect)
+        .eq('is_active', true)
+        .order('sort_weight', { ascending: false })
+        .order('created_at', { ascending: false })
+        .limit(4),
     ]);
 
     const cms: Record<string, string> = {};
@@ -57,6 +69,7 @@ export class HomepageContentService {
       cms,
       categories: catsResult.data ?? [],
       featured_products: prodsResult.data ?? [],
+      bestsellers: bestResult.data ?? [],
     };
   }
 
