@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, InternalServerError
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
 import { CreateReviewDto } from './dto/create-review.dto';
+import { AdminCreateReviewDto } from './dto/admin-create-review.dto';
 
 @Injectable()
 export class ReviewsService {
@@ -43,6 +44,34 @@ export class ReviewsService {
       .insert({ ...dto, user_id: userId })
       .select().single();
     if (error) throw error;
+    return data;
+  }
+
+  /**
+   * Admin: create a review directly (no purchase verification). Used to seed
+   * ratings / import off-platform feedback. Auto-approved so it counts toward
+   * the product's avg_rating + review_count immediately.
+   */
+  async adminCreate(dto: AdminCreateReviewDto) {
+    const row: Record<string, any> = {
+      product_id: dto.product_id,
+      rating: dto.rating,
+      guest_name: dto.guest_name,
+      title: dto.title ?? null,
+      body: dto.body ?? null,
+      user_id: null,
+      is_approved: true,
+    };
+    if (dto.created_at) row.created_at = dto.created_at;
+
+    const { data, error } = await this.db.client
+      .from('reviews')
+      .insert(row)
+      .select()
+      .single();
+    if (error) throw new BadRequestException(error.message);
+
+    await this.refreshProductStats(dto.product_id);
     return data;
   }
 

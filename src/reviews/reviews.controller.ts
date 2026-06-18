@@ -3,6 +3,7 @@ import { CacheInterceptor, CacheTTL } from '@nestjs/cache-manager';
 import { Throttle } from '@nestjs/throttler';
 import { ReviewsService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
+import { AdminCreateReviewDto } from './dto/admin-create-review.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -46,6 +47,13 @@ export class ReviewsController {
   @Get('pending')
   findPending() {
     return this.reviews.findPending();
+  }
+
+  @UseGuards(AdminGuard)
+  @AdminAction('review.create')
+  @Post('admin/create')
+  adminCreate(@Body() dto: AdminCreateReviewDto) {
+    return this.reviews.adminCreate(dto);
   }
 
   @UseGuards(AdminGuard)
