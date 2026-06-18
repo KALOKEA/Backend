@@ -29,9 +29,12 @@ export class HomepageContentService {
     bestsellers: any[];
   }> {
     // Shared product projection — keep featured + bestseller selects identical.
+    // MUST include product_variants (ProductCard computes in/out-of-stock from
+    // them) and avg_rating/review_count (so cards show star ratings).
     const productSelect = `
-          id, name, slug, base_price, compare_price, is_featured, tags,
+          id, name, slug, base_price, compare_price, is_featured, tags, avg_rating, review_count,
           product_images(url, alt_text, is_primary, sort_order),
+          product_variants(id, size, colour, price, stock, sku, is_active),
           categories(name, slug)
         `;
     const [cmsResult, catsResult, prodsResult, bestResult] = await Promise.all([
