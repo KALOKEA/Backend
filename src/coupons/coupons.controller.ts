@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { CouponsService } from './coupons.service';
 import { CreateCouponDto } from './dto/create-coupon.dto';
 import { ValidateCouponDto } from './dto/validate-coupon.dto';
@@ -16,6 +16,12 @@ export class CouponsController {
   @Post('validate')
   validate(@Body() dto: ValidateCouponDto) {
     return this.coupons.validate(dto);
+  }
+
+  @Public()
+  @Get('best-offer')
+  bestOffer(@Query('price') price: string) {
+    return this.coupons.bestOffer(Number(price));
   }
 
   @UseGuards(AdminGuard)

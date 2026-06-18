@@ -33,4 +33,9 @@ export class CreateCouponDto {
   @IsOptional()
   @IsBoolean()
   is_active?: boolean;
+
+  /** When true, advertised on product pages as a "Get it at ₹X" offer. */
+  @IsOptional()
+  @IsBoolean()
+  is_featured?: boolean;
 }

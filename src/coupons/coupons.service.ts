@@ -73,6 +73,35 @@ export class CouponsService {
     };
   }
 
+  /**
+   * Public: best FEATURED coupon applicable to a single item at `price` (paise).
+   * Powers the "Get it at ₹X — How?" badge. Only is_featured coupons are returned,
+   * so secret / targeted codes are never exposed on public product pages.
+   */
+  async bestOffer(price: number) {
+    if (!price || price <= 0) return { best: null };
+    const now = new Date();
+    const { data: coupons } = await this.db.client
+      .from('coupons')
+      .select('code, type, value, min_order_value, max_uses, used_count, valid_from, valid_until')
+      .eq('is_active', true)
+      .eq('is_featured', true);
+
+    let best: { code: string; type: string; value: number; discount: number; final_price: number } | null = null;
+    for (const c of coupons || []) {
+      if (c.valid_until && new Date(c.valid_until) < now) continue;
+      if (c.valid_from && new Date(c.valid_from) > now) continue;
+      if (c.max_uses != null && c.used_count >= c.max_uses) continue;
+      if ((c.min_order_value || 0) > price) continue; // must apply to this item alone
+      const raw = c.type === 'percent' ? Math.round((price * c.value) / 100) : c.value;
+      const discount = Math.min(raw, price);
+      if (discount > 0 && (!best || discount > best.discount)) {
+        best = { code: c.code, type: c.type, value: c.value, discount, final_price: price - discount };
+      }
+    }
+    return { best };
+  }
+
   // Record a redemption once an order using this coupon is placed. Atomic:
   // redeem_coupon bumps used_count only if still under max_uses and records the
   // use in one statement, so two concurrent orders can't exceed the limit.
