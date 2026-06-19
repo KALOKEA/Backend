@@ -160,6 +160,12 @@ export class AuthService {
         .select()
         .single();
       user = newUser;
+      // Fire-and-forget welcome email for new users who registered with an email
+      if (newUser?.email) {
+        this.email.sendNewsletterWelcome(newUser.email).catch(err =>
+          this.logger.error(`Welcome email failed for ${newUser.email}: ${err.message}`),
+        );
+      }
     } else {
       // Update existing user: fill in any missing fields if newly provided
       const updates: Record<string, any> = {};

@@ -69,4 +69,9 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   fabric_care?: string;
+
+  /** Model info shown on product page, e.g. "Model is 5'6", 58 kg, wearing size S" */
+  @IsOptional()
+  @IsString()
+  model_info?: string;
 }

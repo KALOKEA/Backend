@@ -946,4 +946,40 @@ export class EmailService {
     });
     await this.send(to, `Shipped — #${vars.order_id}`, html, undefined, 'order_awb_assigned');
   }
+
+  // ── Win-back (re-engagement) ───────────────────────────────────────────────
+
+  async sendWinbackEmail(to: string, vars: { customer_name: string }): Promise<void> {
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
+    const unsubUrl = this.unsubUrl(to);
+
+    const body = `
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Hi ${vars.customer_name}, it's been a while since your last order.
+        We've added new styles since you last visited — come explore what's fresh.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:22px;">
+        <tr><td style="border-radius:6px;background:#0a0a0a;">
+          <a href="${siteUrl}/shop/"
+             style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
+            Explore New Arrivals
+          </a>
+        </td></tr>
+      </table>
+      <p style="margin:0 0 12px;font-size:13px;line-height:1.7;color:#6b6b6b;">
+        As a valued customer, you get free shipping on your next order — no code needed.
+      </p>
+      <p style="margin:0;font-size:12px;line-height:1.6;color:#9a9a9a;">
+        Questions? Reply to this email and our team will get back to you.
+      </p>
+    `;
+    const html = this.layout({
+      preheader: `We miss you — new styles are waiting for you at Kalokea`,
+      eyebrow: 'We Miss You',
+      heading: `It's been a while, ${vars.customer_name}`,
+      body,
+      footerNote: `You received this because you're a Kalokea customer. <a href="${unsubUrl}" style="color:#7C4A2D;text-decoration:underline;">Unsubscribe</a>`,
+    });
+    await this.send(to, `We miss you — new styles are here`, html, undefined, 'winback');
+  }
 }

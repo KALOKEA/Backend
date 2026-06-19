@@ -231,6 +231,96 @@ export class CronService {
   }
 
   /**
+   * Win-back email — runs once daily at 10 AM.
+   *
+   * Targets customers who placed at least one order but whose most recent order
+   * was between 7 and 30 days ago, ensuring we don't spam recent buyers or
+   * re-target people who've been inactive for too long.
+   *
+   * Dedup: one win-back email per recipient per 30-day window (email_log).
+   */
+  @Cron('0 10 * * *')
+  async sendWinbackEmails() {
+    try {
+      const now = new Date();
+      const sevenDaysAgo  = new Date(now.getTime() - 7  * 24 * 60 * 60 * 1000).toISOString();
+      const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+      // Users whose most recent order falls in the 7–30 day window
+      const { data: orders, error: ordersErr } = await this.db.client
+        .from('orders')
+        .select('user_id, created_at')
+        .lte('created_at', sevenDaysAgo)
+        .gte('created_at', thirtyDaysAgo)
+        .not('user_id', 'is', null);
+
+      if (ordersErr) {
+        this.logger.error(`Win-back order query failed: ${ordersErr.message}`);
+        return;
+      }
+      if (!orders || orders.length === 0) return;
+
+      // Deduplicate: keep only the most recent order per user
+      const latestByUser = new Map<string, string>();
+      for (const o of orders as any[]) {
+        const existing = latestByUser.get(o.user_id);
+        if (!existing || o.created_at > existing) latestByUser.set(o.user_id, o.created_at);
+      }
+      const userIds = [...latestByUser.keys()];
+
+      // Exclude users who placed a newer order (within 7 days)
+      const { data: recentOrders } = await this.db.client
+        .from('orders')
+        .select('user_id')
+        .in('user_id', userIds)
+        .gte('created_at', sevenDaysAgo);
+      const recentBuyers = new Set((recentOrders ?? []).map((o: any) => o.user_id));
+
+      // Get user emails
+      const { data: users } = await this.db.client
+        .from('users')
+        .select('id, email, name')
+        .in('id', userIds);
+      if (!users || users.length === 0) return;
+
+      // Deduplicate against email_log (30-day window)
+      const { data: recentWinbacks } = await this.db.client
+        .from('email_log')
+        .select('recipient')
+        .eq('email_type', 'winback')
+        .gte('created_at', thirtyDaysAgo);
+      const alreadyEmailed = new Set((recentWinbacks ?? []).map((e: any) => e.recipient));
+
+      let sent = 0;
+      for (const user of users as any[]) {
+        if (!user.email) continue;
+        if (recentBuyers.has(user.id)) continue;
+        if (alreadyEmailed.has(user.email)) continue;
+
+        try {
+          await this.email.sendWinbackEmail(user.email, {
+            customer_name: user.name || 'there',
+          });
+          const { error: logErr } = await this.db.client.from('email_log').insert({
+            recipient: user.email,
+            email_type: 'winback',
+            subject: 'We miss you — new styles are here',
+            status: 'sent',
+          });
+          if (logErr) this.logger.warn(`email_log insert failed for winback ${user.email}: ${logErr.message}`);
+          sent++;
+        } catch (err: any) {
+          this.logger.error(`Win-back email failed for ${user.email}: ${err?.message}`);
+        }
+      }
+
+      if (sent > 0) this.logger.log(`Win-back: sent ${sent} re-engagement email(s)`);
+    } catch (err: any) {
+      this.logger.error(`Win-back cron failed: ${err?.message}`);
+    }
+  }
+
+  /**
    * Back-in-stock notifications — runs every 30 minutes.
    * Delegates to StockNotificationsService which queries stock_notifications,
    * checks current stock levels, and emails pending subscribers.
