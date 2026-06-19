@@ -259,7 +259,7 @@ export class EmailService {
 
     const body = `
       <p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:#6b6b6b;">
-        Hi ${vars.customer_name}, thank you for your order. Your booking is confirmed &mdash; we&rsquo;ll let you know as soon as it ships.${vars.invoice_html ? ' Your GST tax invoice is attached to this email.' : ''}
+        Hi ${vars.customer_name}, thank you for your order. Your booking is confirmed &mdash; we&rsquo;ll let you know as soon as it ships. You can view and print your GST tax invoice using the button below.
       </p>
       <p style="margin:0 0 10px;font-size:11px;letter-spacing:1px;text-transform:uppercase;color:#9a9a9a;">Order #${vars.order_id}</p>
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 8px;">
@@ -292,11 +292,9 @@ export class EmailService {
       footerNote: 'Questions about your order? Just reply to this email.',
     });
 
-    const attachments = vars.invoice_html
-      ? [{ name: `Invoice-${vars.order_id}.html`, content: Buffer.from(vars.invoice_html, 'utf-8').toString('base64') }]
-      : undefined;
-
-    await this.send(to, `Order confirmed — #${vars.order_id}`, html, attachments, 'order_confirmation');
+    // No HTML attachment — Gmail shows raw .html code. The "View Invoice" link
+    // in the email body opens the properly-rendered invoice page instead.
+    await this.send(to, `Order confirmed — #${vars.order_id}`, html, undefined, 'order_confirmation');
   }
 
   async sendOrderShipped(to: string, vars: {
