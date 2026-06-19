@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException, InternalServerErrorException }
 import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
 
 const SR_BASE = 'https://apiv2.shiprocket.in/v1/external';
 
@@ -16,6 +17,7 @@ export class ShiprocketService {
     private config: ConfigService,
     private db: DatabaseService,
     private email: EmailService,
+    private whatsapp: WhatsAppService,
   ) {}
 
   // ─── Auth ────────────────────────────────────────────────────────────────────
@@ -351,7 +353,7 @@ export class ShiprocketService {
 
     const { data: order } = await this.db.client
       .from('orders')
-      .select('id, status')
+      .select('id, status, order_number, address_snapshot, awb_code, tracking_number, courier_name')
       .eq('awb_code', awb)
       .single();
 
@@ -372,6 +374,23 @@ export class ShiprocketService {
       this.logger.error(`Webhook: failed to update order ${order.id} to status "${status}": ${srUpdateErr.message}`);
     } else {
       this.logger.log(`Webhook: order ${order.id} status="${status}" (our: ${ourStatus || 'no change'})`);
+    }
+
+    // WhatsApp notifications — fire-and-forget, only on first transition.
+    if (ourStatus && order.status !== ourStatus) {
+      const phone = (order.address_snapshot as any)?.phone;
+      if (phone) {
+        if (ourStatus === 'shipped') {
+          this.whatsapp.sendOrderShipped(
+            phone,
+            order.order_number,
+            order.courier_name || 'Shiprocket',
+            order.awb_code || order.tracking_number || '',
+          );
+        } else if (ourStatus === 'delivered') {
+          this.whatsapp.sendOrderDelivered(phone, order.order_number);
+        }
+      }
     }
   }
 

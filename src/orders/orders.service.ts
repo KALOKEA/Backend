@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, ForbiddenException,
 import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { SettingsService } from '../settings/settings.service';
 import { GstService } from '../gst/gst.service';
@@ -20,6 +21,7 @@ export class OrdersService {
   constructor(
     private db: DatabaseService,
     private email: EmailService,
+    private whatsapp: WhatsAppService,
     private coupons: CouponsService,
     private settings: SettingsService,
     private gst: GstService,
@@ -519,6 +521,25 @@ export class OrdersService {
         invoice_html: invoiceHtml,
         guest_email: order.guest_email || undefined,
       });
+    }
+
+    // WhatsApp confirmation — fire-and-forget, never blocks response.
+    // Phone comes from address snapshot (always present for both COD and Razorpay).
+    const customerPhone = addr.phone || order.guest_phone;
+    if (customerPhone) {
+      this.whatsapp.sendOrderConfirmation(
+        customerPhone,
+        order.order_number,
+        Number(order.total) || 0,
+      );
+      // COD: also send a COD-specific confirmation message
+      if (order.payment_method === 'cod') {
+        this.whatsapp.sendCodConfirmation(
+          customerPhone,
+          order.order_number,
+          Number(order.total) || 0,
+        );
+      }
     }
 
     await this.email.sendAdminNewOrder({

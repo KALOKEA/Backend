@@ -33,6 +33,8 @@ const FEATURE = [
   'SHIPROCKET_PICKUP_PINCODE',
   'SHIPROCKET_WEBHOOK_TOKEN',
   'INSTAGRAM_ACCESS_TOKEN',  // Long-lived Instagram Graph API token for feed
+  'WHATSAPP_PHONE_NUMBER_ID', // Meta Cloud API — WhatsApp Business phone number ID
+  'WHATSAPP_ACCESS_TOKEN',    // Meta Cloud API — permanent system user access token
 ] as const;
 
 export function validate(config: Record<string, unknown>) {

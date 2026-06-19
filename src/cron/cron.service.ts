@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { DatabaseService } from '../database/database.service';
 import { EmailService } from '../email/email.service';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { StockNotificationsService } from '../stock-notifications/stock-notifications.service';
 
 /** Fallback when store_settings.low_stock_threshold is not set. */
@@ -14,6 +15,7 @@ export class CronService {
   constructor(
     private db: DatabaseService,
     private email: EmailService,
+    private whatsapp: WhatsAppService,
     private stockNotifications: StockNotificationsService,
   ) {}
 
@@ -151,7 +153,7 @@ export class CronService {
       // Step 2 — get user emails (profile table)
       const { data: users, error: usersErr } = await this.db.client
         .from('users')
-        .select('id, email, name')
+        .select('id, email, name, phone')
         .in('id', userIds);
 
       if (usersErr || !users) {
@@ -217,6 +219,11 @@ export class CronService {
             this.logger.warn(`email_log insert failed for ${user.email}: ${logErr.message}`);
           }
           sent++;
+
+          // WhatsApp abandoned cart nudge — fire-and-forget
+          if (user.phone) {
+            this.whatsapp.sendAbandonedCart(user.phone, user.name || 'there');
+          }
         } catch (err: any) {
           this.logger.error(`Abandoned cart email failed for ${user.email}: ${err?.message}`);
         }

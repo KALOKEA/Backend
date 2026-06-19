@@ -38,6 +38,7 @@ import { ShiprocketModule } from './shiprocket/shiprocket.module';
 import { CmsModule } from './cms/cms.module';
 import { InstagramFeedModule } from './instagram-feed/instagram-feed.module';
 import { StockNotificationsModule } from './stock-notifications/stock-notifications.module';
+import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { validate } from './config/env.validation';
 
@@ -66,6 +67,7 @@ import { validate } from './config/env.validation';
         return { ttl: 60_000, max: 500 };
       },
     }),
+    WhatsAppModule,
     DatabaseModule,
     EmailModule,
     HealthModule,
