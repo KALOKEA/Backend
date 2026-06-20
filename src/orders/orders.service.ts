@@ -519,7 +519,9 @@ export class OrdersService {
           payment_method: order.payment_method === 'cod' ? 'Cash on Delivery' : 'Razorpay (prepaid)',
         },
         invoice_html: invoiceHtml,
-        guest_email: order.guest_email || undefined,
+        // Pass the verified email so the "View Invoice" link in the email works
+        // for both guest orders (guest_email) and logged-in user orders (account email).
+        guest_email: order.guest_email || (order.users as any)?.email || undefined,
       });
     }
 
@@ -932,21 +934,24 @@ export class OrdersService {
   async getInvoice(id: string, user?: { id: string; role: string }, guestEmail?: string): Promise<string> {
     const { data: order } = await this.db.client
       .from('orders')
-      .select('*, order_items(*)')
+      .select('*, order_items(*), users(email)')
       .eq('id', id)
       .single();
     if (!order) throw new NotFoundException('Order not found');
 
     const isAdmin = user?.role === 'admin';
     const isOwner = user?.id && order.user_id === user.id;
-    // Guests can access their invoice by providing the email used at checkout.
-    const isGuestOwner =
-      !order.user_id &&
+    // Email-based access: works for both guest orders (guest_email) and
+    // logged-in user orders (user's registered email). The link in the
+    // confirmation email already carries the correct email param, so anyone
+    // who received the email can view their invoice without a JWT.
+    const orderEmail = order.guest_email || (order.users as any)?.email;
+    const isEmailVerified =
       guestEmail &&
-      order.guest_email &&
-      order.guest_email.toLowerCase() === guestEmail.toLowerCase();
+      orderEmail &&
+      orderEmail.toLowerCase() === guestEmail.toLowerCase();
 
-    if (!isAdmin && !isOwner && !isGuestOwner) {
+    if (!isAdmin && !isOwner && !isEmailVerified) {
       throw new NotFoundException('Order not found');
     }
     return this.renderInvoiceHtml(order);
