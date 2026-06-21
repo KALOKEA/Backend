@@ -14,7 +14,7 @@ export class EmailService {
     private db: DatabaseService,
   ) {
     this.apiKey = this.config.get('BREVO_API_KEY') || '';
-    this.senderEmail = this.config.get('BREVO_SENDER_EMAIL') || 'noreply@kalokea.in';
+    this.senderEmail = this.config.get('BREVO_SENDER_EMAIL') || 'support@kalokea.com';
     this.senderName = this.config.get('BREVO_SENDER_NAME') || 'Kalokea';
   }
 
@@ -24,7 +24,7 @@ export class EmailService {
    * this and marks the address as unsubscribed in the DB.
    */
   private unsubUrl(email: string): string {
-    const backendUrl = this.config.get('BACKEND_URL') || 'https://api.kalokea.in';
+    const backendUrl = this.config.get('BACKEND_URL') || 'https://api.kalokea.com';
     const token = Buffer.from(email.trim().toLowerCase()).toString('base64url');
     return `${backendUrl}/newsletter/unsubscribe?t=${token}`;
   }
@@ -234,8 +234,8 @@ export class EmailService {
       `
       : '';
 
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
-    const backendUrl = this.config.get('BACKEND_URL') || 'https://api.kalokea.in';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.com';
+    const backendUrl = this.config.get('BACKEND_URL') || 'https://api.kalokea.com';
     const trackLink = `${siteUrl}/account/orders/`;
     const invoiceLink = vars.order_db_id
       ? `${backendUrl}/orders/${vars.order_db_id}/invoice${vars.guest_email ? `?guest_email=${encodeURIComponent(vars.guest_email)}` : ''}`
@@ -395,7 +395,7 @@ export class EmailService {
       </p>
       <table role="presentation" cellpadding="0" cellspacing="0" style="margin:6px 0 0;">
         <tr><td style="border-radius:6px;background:#0a0a0a;">
-          <a href="https://kalokea.in/shop/" style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">Shop New Arrivals</a>
+          <a href="https://kalokea.com/shop/" style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">Shop New Arrivals</a>
         </td></tr>
       </table>
     `;
@@ -489,7 +489,7 @@ export class EmailService {
     order_id: string;
     amount: number; // paise
   }): Promise<void> {
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.com';
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         Hi ${vars.customer_name}, unfortunately your payment of
@@ -513,7 +513,7 @@ export class EmailService {
       eyebrow: 'Action Required',
       heading: 'Your payment didn’t go through',
       body,
-      footerNote: 'If this keeps happening, contact us at support@kalokea.in.',
+      footerNote: 'If this keeps happening, contact us at support@kalokea.com.',
     });
     await this.send(to, `Payment failed — Order #${vars.order_id}`, html, undefined, 'payment_failed');
   }
@@ -525,7 +525,7 @@ export class EmailService {
     order_id: string;
     order_db_id: string; // UUID for the review link
   }): Promise<void> {
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.com';
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         Hi ${vars.customer_name}, your order <strong style="color:#0a0a0a;">#${vars.order_id}</strong>
@@ -562,7 +562,7 @@ export class EmailService {
     product_name: string;
     product_slug: string;
   }): Promise<void> {
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.com';
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         Hi ${vars.customer_name}, your review for
@@ -597,7 +597,7 @@ export class EmailService {
     order_id: string;
     instructions?: string;
   }): Promise<void> {
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.com';
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         Hi ${vars.customer_name}, your return request for order
@@ -642,7 +642,7 @@ export class EmailService {
     order_id: string;
     total: number; // paise
   }): Promise<void> {
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.com';
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         Hi ${vars.customer_name}, your order <strong style="color:#0a0a0a;">#${vars.order_id}</strong>
@@ -660,7 +660,7 @@ export class EmailService {
         </td></tr>
       </table>
       <p style="margin:18px 0 0;font-size:13px;color:#6b6b6b;">
-        If you didn&rsquo;t request this cancellation, please contact us at support@kalokea.in.
+        If you didn&rsquo;t request this cancellation, please contact us at support@kalokea.com.
       </p>
     `;
     const html = this.layout({
@@ -769,7 +769,7 @@ export class EmailService {
     order_id: string;
     reason?: string;
   }): Promise<void> {
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.com';
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         Hi ${vars.customer_name}, unfortunately we are unable to approve your return request
@@ -785,7 +785,7 @@ export class EmailService {
       </table>` : ''}
       <p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         If you believe this decision was made in error, please contact our support team at
-        <a href="mailto:support@kalokea.in" style="color:#0a0a0a;">support@kalokea.in</a>.
+        <a href="mailto:support@kalokea.com" style="color:#0a0a0a;">support@kalokea.com</a>.
       </p>
       <table role="presentation" cellpadding="0" cellspacing="0">
         <tr><td style="border-radius:6px;background:#0a0a0a;">
@@ -811,7 +811,7 @@ export class EmailService {
     customer_name: string;
     order_id: string;
   }): Promise<void> {
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.com';
     const body = `
       <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
         Hi ${vars.customer_name}, great news — your order
@@ -851,7 +851,7 @@ export class EmailService {
       image_url?: string;
     }>;
   }): Promise<void> {
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.com';
     const unsubUrl = this.unsubUrl(to);
 
     const itemRows = vars.items.map((item) => `
@@ -950,7 +950,7 @@ export class EmailService {
   // ── Win-back (re-engagement) ───────────────────────────────────────────────
 
   async sendWinbackEmail(to: string, vars: { customer_name: string }): Promise<void> {
-    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.in';
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.com';
     const unsubUrl = this.unsubUrl(to);
 
     const body = `

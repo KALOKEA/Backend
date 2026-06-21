@@ -161,7 +161,7 @@ async function seedSettings() {
     seller_gstin: '',
     seller_state: 'Maharashtra',
     gst_rate: 5,
-    admin_email: 'admin@kalokea.in',
+    admin_email: 'support@kalokea.com',
     shipping_free_threshold: 99900,
     shipping_fee: 4900,
     cod_fee: 4900,

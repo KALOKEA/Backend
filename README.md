@@ -1,6 +1,6 @@
 # Kalokea — Backend API
 
-NestJS REST API for the [Kalokea](https://kalokea.pages.dev) fashion e-commerce platform. Deployed on Railway.
+NestJS REST API for the [Kalokea](https://kalokea.com) fashion e-commerce platform. Deployed on Railway.
 
 ## Stack
 

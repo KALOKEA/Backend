@@ -108,7 +108,7 @@ export class StockNotificationsService {
     variantLabel: string,
     productSlug: string,
   ): Promise<void> {
-    const siteUrl = this.config.get<string>('SITE_URL') || 'https://kalokea.in';
+    const siteUrl = this.config.get<string>('SITE_URL') || 'https://kalokea.com';
     // Delegate to EmailService using the layout shell for brand consistency.
     // We call the private send method indirectly via a dedicated public wrapper
     // added in email.service.ts.

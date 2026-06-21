@@ -13,7 +13,7 @@ Audience: any developer who needs to deploy without prior project knowledge.
 | Backend API | Railway (Dockerfile) | https://backend-production-73aa.up.railway.app |
 | Database | Supabase (PostgreSQL) | Project ref: ygxbqdwtaryciskskokc |
 | Images | Cloudinary | Cloud: kalokea |
-| Email | Brevo (SMTP / API) | noreply@kalokea.in |
+| Email | Brevo (SMTP / API) | support@kalokea.com |
 | Payments | Razorpay | Test / Live keys |
 
 Git repos:
@@ -86,7 +86,7 @@ JWT_SECRET=<generate: openssl rand -base64 32>
 JWT_REFRESH_SECRET=<generate: openssl rand -base64 32>
 JWT_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=30d
-ALLOWED_ORIGINS=https://kalokea.in,https://www.kalokea.in,https://kalokea.pages.dev
+ALLOWED_ORIGINS=https://kalokea.com,https://www.kalokea.com,https://kalokea.pages.dev
 ```
 
 **Required for payments:**
@@ -99,7 +99,7 @@ RAZORPAY_WEBHOOK_SECRET=<set in Razorpay → Webhooks>
 **Required for email:**
 ```
 BREVO_API_KEY=<from Brevo → SMTP & API → API Keys>
-BREVO_SENDER_EMAIL=noreply@kalokea.in
+BREVO_SENDER_EMAIL=support@kalokea.com
 BREVO_SENDER_NAME=Kalokea
 ```
 
@@ -112,8 +112,8 @@ CLOUDINARY_API_SECRET=<from Cloudinary dashboard>
 
 **Optional but recommended:**
 ```
-SITE_URL=https://kalokea.in
-ADMIN_EMAIL=admin@kalokea.in
+SITE_URL=https://kalokea.com
+ADMIN_EMAIL=admin@kalokea.com
 SMS_PROVIDER=msg91                          (or: 2factor, generic)
 SMS_API_KEY=<from MSG91 dashboard>
 SMS_SENDER_ID=KALOKEA                       (MSG91 only — DLT-registered sender ID)
@@ -169,7 +169,7 @@ In Cloudflare Pages → your project → Settings → Environment variables → 
 NEXT_PUBLIC_API_URL=https://backend-production-73aa.up.railway.app
 NEXT_PUBLIC_RAZORPAY_KEY_ID=<Razorpay public key (rzp_test_... or rzp_live_...)>
 NEXT_PUBLIC_GA_MEASUREMENT_ID=G-XXXXXXXXXX
-NEXT_PUBLIC_SITE_URL=https://kalokea.in
+NEXT_PUBLIC_SITE_URL=https://kalokea.com
 ```
 
 ### 3.3 Deploy
@@ -186,12 +186,12 @@ Cloudflare Pages auto-builds on push to `main`. Watch: Cloudflare Dashboard → 
 - Check that `NEXT_PUBLIC_API_URL` points to a live backend (Cloudflare Pages fetches products at build time via `lib/server/productsServer.ts`)  
 - If the backend is down during build, `generateStaticParams` returns `[]` — pages still build but product pages will 404 until next redeploy
 
-### 3.4 Custom domain (kalokea.in)
+### 3.4 Custom domain (kalokea.com)
 
-1. Cloudflare Pages → your project → Custom domains → Set up custom domain → `kalokea.in`
-2. Add CNAME record: `kalokea.in → <pages-project>.pages.dev`  
+1. Cloudflare Pages → your project → Custom domains → Set up custom domain → `kalokea.com`
+2. Add CNAME record: `kalokea.com → <pages-project>.pages.dev`  
    (Cloudflare handles SSL automatically)
-3. Update `ALLOWED_ORIGINS` in Railway to include `https://kalokea.in`
+3. Update `ALLOWED_ORIGINS` in Railway to include `https://kalokea.com`
 
 ---
 

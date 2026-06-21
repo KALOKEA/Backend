@@ -79,7 +79,7 @@ async function bootstrap() {
   app.use((req: any, res: any, next: any) => correlationMiddleware.use(req, res, next));
 
   // ALLOWED_ORIGINS (Railway env var) must include ALL frontend origins:
-  // https://kalokea.in,https://www.kalokea.in
+  // https://kalokea.com,https://www.kalokea.com
   // Add https://kalokea.pages.dev during transition if Cloudflare redirect is still active.
   // .trim() prevents accidental whitespace from producing origins that never match.
   // filter(Boolean) drops empty entries.

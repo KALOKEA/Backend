@@ -65,7 +65,7 @@ a{display:inline-block;padding:11px 28px;background:#0a0a0a;color:#fff;text-deco
 <body><div class="card">
 <h1>You&rsquo;ve been unsubscribed</h1>
 <p>We&rsquo;ve removed <strong>${email.replace(/</g, '&lt;')}</strong> from our mailing list. You won&rsquo;t receive any further marketing emails from Kalokea.</p>
-<a href="https://kalokea.in">Back to Shop</a>
+<a href="https://kalokea.com">Back to Shop</a>
 </div></body></html>`);
   }
 

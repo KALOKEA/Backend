@@ -22,8 +22,8 @@ export class CsrfGuard implements CanActivate {
   constructor() {
     const base = [
       'https://kalokea.pages.dev',
-      'https://kalokea.in',
-      'https://www.kalokea.in',
+      'https://kalokea.com',
+      'https://www.kalokea.com',
     ]
     // Allow localhost in development
     if (process.env.NODE_ENV !== 'production') {

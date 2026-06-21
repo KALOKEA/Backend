@@ -699,7 +699,7 @@ INSERT INTO cms_pages (slug, title, content, meta_description) VALUES
 ),
 (
   'contact', 'Contact Us',
-  '<p>We''d love to hear from you. <strong>Email:</strong> support@kalokea.in &nbsp; <strong>Phone:</strong> +91 87996 10432</p>',
+  '<p>We''d love to hear from you. <strong>Email:</strong> support@kalokea.com &nbsp; <strong>Phone:</strong> +91 87996 10432</p>',
   'Contact Kalokea — we are here to help with your orders, returns, and any questions.'
 ),
 (

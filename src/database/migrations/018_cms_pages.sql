@@ -27,7 +27,7 @@ INSERT INTO cms_pages (slug, title, content, meta_description) VALUES
   'Contact Us',
   '<p>We''d love to hear from you. Reach out to us for any questions about your order, products, or collaboration opportunities.</p>
 
-<p><strong>Email:</strong> support@kalokea.in<br>
+<p><strong>Email:</strong> support@kalokea.com<br>
 <strong>Phone:</strong> +91 87996 10432<br>
 <strong>Hours:</strong> Monday – Saturday, 10 AM – 6 PM IST</p>
 
@@ -52,7 +52,7 @@ INSERT INTO cms_pages (slug, title, content, meta_description) VALUES
 <p>We use industry-standard encryption to protect your personal information. Payment data is handled securely by Razorpay and never stored on our servers.</p>
 
 <h2>Contact</h2>
-<p>For privacy concerns, email us at privacy@kalokea.in</p>',
+<p>For privacy concerns, email us at support@kalokea.com</p>',
   'How Kalokea collects, uses, and protects your personal information.'
 ),
 (
@@ -67,7 +67,7 @@ INSERT INTO cms_pages (slug, title, content, meta_description) VALUES
 <p>Sale items, innerwear, and customised products cannot be returned.</p>
 
 <h2>How to Initiate a Return</h2>
-<p>Log in to your account and visit My Orders. Click "Return" on the eligible item and follow the instructions. You can also email returns@kalokea.in with your order number.</p>
+<p>Log in to your account and visit My Orders. Click "Return" on the eligible item and follow the instructions. You can also email support@kalokea.com with your order number.</p>
 
 <h2>Refund Timeline</h2>
 <p>Refunds are processed within <strong>5–7 business days</strong> after we receive and inspect the returned item. The amount will be credited back to your original payment method.</p>
@@ -94,7 +94,7 @@ INSERT INTO cms_pages (slug, title, content, meta_description) VALUES
 <p>You will receive a tracking number via email and SMS once your order is dispatched. Use our <a href="/track-order">Track Order</a> page to check real-time status.</p>
 
 <h2>Delivery Issues</h2>
-<p>If your order is lost or significantly delayed, please contact us at support@kalokea.in within 7 days of the expected delivery date.</p>',
+<p>If your order is lost or significantly delayed, please contact us at support@kalokea.com within 7 days of the expected delivery date.</p>',
   'Kalokea shipping policy — delivery times, free shipping threshold, and tracking.'
 ),
 (
