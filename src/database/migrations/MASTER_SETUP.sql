@@ -68,6 +68,11 @@ ALTER TABLE orders ADD CONSTRAINT orders_payment_status_check
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS cod_refund_method text
   CHECK (cod_refund_method IN ('bank_transfer','upi','cash'));
 ALTER TABLE orders ADD COLUMN IF NOT EXISTS cod_refund_reference text;
+-- Guard column for the pending-payment WhatsApp reminder cron (038).
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_reminder_sent boolean NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS idx_orders_pending_payment
+  ON orders (payment_status, status, payment_method, created_at)
+  WHERE payment_reminder_sent = false;
 
 -- ── RETURNS: reverse logistics (031) ────────────────────────────────────────
 ALTER TABLE returns ADD COLUMN IF NOT EXISTS return_awb                text;

@@ -1,4 +1,6 @@
-import { IsString, IsOptional, IsBoolean, IsNumber, IsArray, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsNumber, IsArray, IsUUID, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+import { ProductFaqDto } from './create-product.dto';
 
 export class UpdateProductDto {
   @IsOptional() @IsString()  name?: string;
@@ -23,5 +25,5 @@ export class UpdateProductDto {
   /** Model info shown on product page, e.g. "Model is 5'6", 58 kg, wearing size S" */
   @IsOptional() @IsString()  model_info?: string;
   /** Admin-editable FAQ list shown on the product page: [{ q, a }, ...]. */
-  @IsOptional() @IsArray()   faqs?: { q: string; a: string }[];
+  @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => ProductFaqDto)  faqs?: ProductFaqDto[];
 }

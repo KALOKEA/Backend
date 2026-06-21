@@ -33,6 +33,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     // naturally, so we skip the revocation check for backward compatibility.
     if (payload.tv !== undefined) {
       const now = Date.now();
+      this.pruneCache(now);
       const cached = this.versionCache.get(payload.sub);
 
       if (!cached || now - cached.ts > CACHE_TTL_MS) {
@@ -56,5 +57,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     }
 
     return { id: payload.sub, role: payload.role };
+  }
+
+  /**
+   * Bound the in-process cache so it can't grow forever (one entry per distinct
+   * user otherwise lived for the process lifetime). Only does work once the map
+   * is sizeable, so the hot path stays cheap. Drops expired entries first; if
+   * still over the hard cap, clears the whole map (it self-rebuilds on demand).
+   */
+  private pruneCache(now: number): void {
+    if (this.versionCache.size < 1000) return;
+    for (const [key, entry] of this.versionCache) {
+      if (now - entry.ts > CACHE_TTL_MS) this.versionCache.delete(key);
+    }
+    if (this.versionCache.size > 10000) this.versionCache.clear();
   }
 }

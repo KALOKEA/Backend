@@ -1,4 +1,17 @@
-import { IsString, IsOptional, IsBoolean, IsNumber, IsArray, IsUUID } from 'class-validator';
+import { IsString, IsOptional, IsBoolean, IsNumber, IsArray, IsUUID, ValidateNested, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+
+/** A single product FAQ entry. Validated + length-capped so the admin can't
+ *  accidentally store malformed or unbounded FAQ data. */
+export class ProductFaqDto {
+  @IsString()
+  @MaxLength(300)
+  q: string;
+
+  @IsString()
+  @MaxLength(3000)
+  a: string;
+}
 
 export class CreateProductDto {
   @IsString()
@@ -78,5 +91,7 @@ export class CreateProductDto {
   /** Admin-editable FAQ list shown on the product page: [{ q, a }, ...]. */
   @IsOptional()
   @IsArray()
-  faqs?: { q: string; a: string }[];
+  @ValidateNested({ each: true })
+  @Type(() => ProductFaqDto)
+  faqs?: ProductFaqDto[];
 }

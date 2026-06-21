@@ -54,6 +54,14 @@ export class WhatsAppService {
   }
 
   /**
+   * Format an integer-paise amount as a rupee string for message bodies.
+   * Money is stored in paise everywhere, so 99900 → "₹999", 100050 → "₹1,000.50".
+   */
+  private inr(paise: number): string {
+    return `₹${(Number(paise) / 100).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+  }
+
+  /**
    * Send a WhatsApp template message.
    * Returns silently on any error so callers never crash.
    */
@@ -132,7 +140,7 @@ export class WhatsAppService {
   sendOrderConfirmation(phone: string, orderNumber: string, total: number): void {
     this.send(phone, 'order_confirmation', [
       orderNumber,
-      `₹${Number(total).toLocaleString('en-IN')}`,
+      this.inr(total),
     ]).catch(() => {});
   }
 
@@ -144,7 +152,7 @@ export class WhatsAppService {
   sendCodConfirmation(phone: string, orderNumber: string, total: number): void {
     this.send(phone, 'cod_order_confirmed', [
       orderNumber,
-      `₹${Number(total).toLocaleString('en-IN')}`,
+      this.inr(total),
     ]).catch(() => {});
   }
 
@@ -183,5 +191,30 @@ export class WhatsAppService {
   sendAbandonedCart(phone: string, name: string): void {
     const firstName = (name || 'there').split(' ')[0];
     this.send(phone, 'abandoned_cart', [firstName]).catch(() => {});
+  }
+
+  /**
+   * Reminder for an online (Razorpay) order whose payment is still pending.
+   * Sent by the cron once, ~45 min after the order was created if still unpaid.
+   * Template: payment_pending
+   * Body vars: {{1}} order number, {{2}} total amount
+   */
+  sendPaymentPending(phone: string, orderNumber: string, total: number): void {
+    this.send(phone, 'payment_pending', [
+      orderNumber,
+      this.inr(total),
+    ]).catch(() => {});
+  }
+
+  /**
+   * Marketing broadcast announcing a new product / collection launch.
+   * NOTE: this is a Meta MARKETING-category template — it may only be sent to
+   * customers who have opted in to marketing, and Meta charges per marketing
+   * conversation. Register it separately from the transactional templates.
+   * Template: new_launch
+   * Body vars: {{1}} product / collection name
+   */
+  sendNewLaunch(phone: string, launchName: string): void {
+    this.send(phone, 'new_launch', [launchName]).catch(() => {});
   }
 }

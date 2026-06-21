@@ -343,4 +343,56 @@ export class CronService {
       this.logger.error(`Back-in-stock cron failed: ${err?.message}`);
     }
   }
+
+  /**
+   * Pending-payment reminder — runs every 15 minutes.
+   *
+   * Finds ONLINE orders (not COD) still unpaid (payment_status='pending',
+   * status='pending') between 45 minutes and 24 hours old that haven't been
+   * reminded yet, sends a WhatsApp nudge to complete payment, and marks them
+   * reminded so each customer is messaged at most once.
+   */
+  @Cron('*/15 * * * *')
+  async sendPendingPaymentReminders() {
+    try {
+      const now = Date.now();
+      const olderThan = new Date(now - 45 * 60 * 1000).toISOString();       // ≥ 45 min old
+      const within24h = new Date(now - 24 * 60 * 60 * 1000).toISOString();  // ≤ 24 h old
+
+      const { data: orders, error } = await this.db.client
+        .from('orders')
+        .select('id, order_number, total, payment_method, address_snapshot, guest_phone')
+        .eq('payment_status', 'pending')
+        .eq('status', 'pending')
+        .neq('payment_method', 'cod')
+        .eq('payment_reminder_sent', false)
+        .lte('created_at', olderThan)
+        .gte('created_at', within24h);
+
+      if (error) {
+        // payment_reminder_sent column may not exist until migration 038 is applied — non-fatal.
+        this.logger.warn(`Pending-payment query failed (run migration 038): ${error.message}`);
+        return;
+      }
+      if (!orders || orders.length === 0) return;
+
+      let sent = 0;
+      for (const o of orders as any[]) {
+        const phone = (o.address_snapshot as any)?.phone || o.guest_phone;
+        if (phone) {
+          this.whatsapp.sendPaymentPending(phone, o.order_number, Number(o.total) || 0);
+          sent++;
+        }
+        // Mark reminded regardless of phone presence so the order isn't re-scanned forever.
+        await this.db.client
+          .from('orders')
+          .update({ payment_reminder_sent: true })
+          .eq('id', o.id);
+      }
+
+      if (sent > 0) this.logger.log(`Pending-payment: reminded ${sent} order(s)`);
+    } catch (err: any) {
+      this.logger.error(`Pending-payment cron failed: ${err?.message}`);
+    }
+  }
 }
