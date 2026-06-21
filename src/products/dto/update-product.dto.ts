@@ -22,4 +22,6 @@ export class UpdateProductDto {
   @IsOptional() @IsString()  fabric_care?: string;
   /** Model info shown on product page, e.g. "Model is 5'6", 58 kg, wearing size S" */
   @IsOptional() @IsString()  model_info?: string;
+  /** Admin-editable FAQ list shown on the product page: [{ q, a }, ...]. */
+  @IsOptional() @IsArray()   faqs?: { q: string; a: string }[];
 }

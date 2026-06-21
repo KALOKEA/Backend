@@ -74,4 +74,9 @@ export class CreateProductDto {
   @IsOptional()
   @IsString()
   model_info?: string;
+
+  /** Admin-editable FAQ list shown on the product page: [{ q, a }, ...]. */
+  @IsOptional()
+  @IsArray()
+  faqs?: { q: string; a: string }[];
 }

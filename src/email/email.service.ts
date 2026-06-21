@@ -237,8 +237,10 @@ export class EmailService {
     const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.com';
     const backendUrl = this.config.get('BACKEND_URL') || 'https://api.kalokea.com';
     const trackLink = `${siteUrl}/account/orders/`;
+    // print=1 makes the invoice page auto-open the browser's Save-as-PDF dialog, so
+    // the "Download Invoice (PDF)" button gives customers a real PDF in one click.
     const invoiceLink = vars.order_db_id
-      ? `${backendUrl}/orders/${vars.order_db_id}/invoice${vars.guest_email ? `?guest_email=${encodeURIComponent(vars.guest_email)}` : ''}`
+      ? `${backendUrl}/orders/${vars.order_db_id}/invoice?print=1${vars.guest_email ? `&guest_email=${encodeURIComponent(vars.guest_email)}` : ''}`
       : null;
 
     const addr = vars.address;
@@ -278,7 +280,7 @@ export class EmailService {
           ${invoiceLink ? `<td>
             <a href="${invoiceLink}"
                style="display:inline-block;padding:11px 22px;background:#faf8f5;border:1px solid #e8e4e0;font-family:Arial,Helvetica,sans-serif;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:#0a0a0a;text-decoration:none;border-radius:4px;">
-              View Invoice
+              Download Invoice (PDF)
             </a>
           </td>` : ''}
         </tr>

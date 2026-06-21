@@ -1011,9 +1011,14 @@ export class OrdersService {
   .totals{width:300px;margin-left:auto;}
   .totals td{border:none;padding:4px 10px;}
   .grand{font-weight:bold;border-top:2px solid #0a0a0a;}
-  @media print{body{padding:0;}}
+  @page{size:A4;margin:14mm;}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .toolbar{text-align:right;margin:0 0 18px;}
+  .btn{display:inline-block;padding:11px 22px;background:#0a0a0a;color:#fff;border:none;border-radius:4px;font-size:12px;letter-spacing:1px;text-transform:uppercase;cursor:pointer;text-decoration:none;font-family:Arial,Helvetica,sans-serif;}
+  @media print{body{padding:0;} .no-print{display:none !important;}}
 </style></head>
-<body onload="window.focus()">
+<body onload="(function(){try{if(new URLSearchParams(location.search).get('print')==='1'){setTimeout(function(){window.print();},500);}else{window.focus();}}catch(e){}})()">
+  <div class="toolbar no-print"><button class="btn" onclick="window.print()">&#8595; Download / Print PDF</button></div>
   <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0a0a0a;padding-bottom:16px;">
     <div><h1>KALOKEA</h1><p class="muted" style="margin:4px 0 0;">Tax Invoice</p></div>
     <div style="text-align:right" class="muted">
