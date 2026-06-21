@@ -295,7 +295,10 @@ export class AdminService {
   /** Conversion Rate: % of users with at least one paid order */
   async getConversionRate() {
     const [{ count: totalUsers }, { data: paidOrders }] = await Promise.all([
-      this.db.client.from('users').select('id', { count: 'exact' }).eq('role', 'user'),
+      // Customers have role 'customer' (schema CHECK allows only 'customer'/'admin').
+      // The old code filtered role='user' — which never matches — so conversion
+      // rate and total_users were always 0.
+      this.db.client.from('users').select('id', { count: 'exact' }).eq('role', 'customer'),
       this.db.client.from('orders').select('user_id').eq('payment_status', 'paid').not('user_id', 'is', null),
     ]);
 
