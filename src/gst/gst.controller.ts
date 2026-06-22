@@ -27,6 +27,12 @@ export class GstController {
     return this.gst.getSummary({ from, to });
   }
 
+  /** Cash-flow / settlement: collected vs COD-outstanding vs refunded. */
+  @Get('cashflow')
+  cashflow(@Query('from') from?: string, @Query('to') to?: string) {
+    return this.gst.getCashflowSummary({ from, to });
+  }
+
   /** Per-transaction CSV (opens in Excel) — full ledger for the CA. */
   @Get('export/transactions')
   async exportTransactions(

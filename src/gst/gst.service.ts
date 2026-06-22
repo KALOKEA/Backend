@@ -481,6 +481,66 @@ export class GstService {
     return this.toCsv([header, ...lines]);
   }
 
+  /**
+   * Cash-flow / settlement summary (money view, NOT the tax view). Answers the
+   * three real-world scenarios the owner files against:
+   *   1. Sold & money received  → prepaid (Razorpay paid) + COD delivered (cash collected).
+   *   2. Returned / refunded     → money paid back out.
+   *   3. Sold but OUTSTANDING     → COD orders not yet delivered (cash still to come).
+   *
+   * COD is modelled honestly from order status: the system never marks COD
+   * payment_status='paid' (cash is taken at the door), so "collected" = COD whose
+   * order status is 'delivered', and "outstanding" = COD not yet delivered/cancelled.
+   * Money is paise.
+   */
+  async getCashflowSummary(opts: { from?: string; to?: string }) {
+    let q = this.db.client
+      .from('orders')
+      .select('total, payment_method, payment_status, status, created_at');
+    if (opts.from) q = q.gte('created_at', this.dayStart(opts.from));
+    if (opts.to) q = q.lt('created_at', this.dayEnd(opts.to));
+    const { data, error } = await q;
+    if (error) throw error;
+    const orders = data || [];
+
+    const isCod = (o: any) => o.payment_method === 'cod';
+    const sum = (arr: any[]) => arr.reduce((s, o) => s + (Number(o.total) || 0), 0);
+
+    // Prepaid (Razorpay) money in hand.
+    const prepaid = orders.filter((o) => o.payment_status === 'paid' && !isCod(o));
+    // COD cash collected on delivery.
+    const codCollected = orders.filter(
+      (o) => isCod(o) && o.status === 'delivered' && o.payment_status !== 'refunded',
+    );
+    // COD sold but money NOT yet received (not delivered, not cancelled, not refunded).
+    const codOutstanding = orders.filter(
+      (o) =>
+        isCod(o) &&
+        !['delivered', 'cancelled'].includes(o.status) &&
+        o.payment_status !== 'refunded',
+    );
+    // Money paid back out.
+    const refunded = orders.filter((o) => o.payment_status === 'refunded');
+
+    const collected = sum(prepaid) + sum(codCollected);
+    return {
+      from: opts.from || null,
+      to: opts.to || null,
+      collected,                                  // total money in hand (1)
+      prepaid_collected: sum(prepaid),
+      cod_collected: sum(codCollected),
+      cod_outstanding: sum(codOutstanding),       // money still to come (3)
+      refunded: sum(refunded),                    // money paid out (2)
+      net_in_hand: collected - sum(refunded),
+      counts: {
+        prepaid_collected: prepaid.length,
+        cod_collected: codCollected.length,
+        cod_outstanding: codOutstanding.length,
+        refunded: refunded.length,
+      },
+    };
+  }
+
   // ── small utils ──
   private rupees(paise: any): string {
     return ((Number(paise) || 0) / 100).toFixed(2);
