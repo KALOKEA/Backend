@@ -149,7 +149,7 @@ describe('AuthService', () => {
         const q: any = {};
         const noop = () => q;
         q.select = noop; q.eq = noop; q.gt = noop; q.order = noop; q.limit = noop;
-        q.then = (_: any, __: any) => Promise.resolve({ data: [] });
+        q.then = (onF: any) => Promise.resolve({ data: [] }).then(onF);
         return q;
       });
 
@@ -178,9 +178,9 @@ describe('AuthService', () => {
         q.update = noop;
         // First chain call → return the session; subsequent → resolve update ok.
         if (callCount === 1) {
-          q.then = (_: any, __: any) => Promise.resolve({ data: [session] });
+          q.then = (onF: any) => Promise.resolve({ data: [session] }).then(onF);
         } else {
-          q.then = (_: any, __: any) => Promise.resolve({ data: {}, error: null });
+          q.then = (onF: any) => Promise.resolve({ data: {}, error: null }).then(onF);
         }
         return q;
       });
@@ -211,7 +211,7 @@ describe('AuthService', () => {
         q.single = jest.fn().mockResolvedValue({ data: fakeUser });
         q.maybeSingle = jest.fn().mockResolvedValue(call === 1 ? { data: null } : { data: fakeUser });
         // Sessions array lookup
-        q.then = (_: any, __: any) => Promise.resolve({ data: [session] });
+        q.then = (onF: any) => Promise.resolve({ data: [session] }).then(onF);
         return q;
       });
 
