@@ -78,6 +78,13 @@ function makeMockGst() {
       return { cgst: 0, sgst: 0, igst: tax, total: tax };
     }),
     postSaleLedger: jest.fn().mockResolvedValue(undefined),
+    isIntraState: jest.fn().mockImplementation((buyer: string, seller: string) => {
+      const b = String(buyer || '').trim().toLowerCase();
+      const s = String(seller || '').trim().toLowerCase();
+      return !!s && s === b;
+    }),
+    garmentSlabRate: jest.fn().mockImplementation((paise: number) => (paise >= 100000 ? 12 : 5)),
+    resolveRate: jest.fn().mockImplementation((r: number, d: number) => (Number(r) > 0 ? Number(r) : (Number(d) || 0))),
     splitTax: jest.fn().mockImplementation((total: number, rate: number, isIntra: boolean) => {
       const tax = Math.round(total * rate / (100 + rate));
       return { cgst: isIntra ? tax / 2 : 0, sgst: isIntra ? tax / 2 : 0, igst: isIntra ? 0 : tax };
