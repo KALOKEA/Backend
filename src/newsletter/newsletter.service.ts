@@ -46,8 +46,28 @@ export class NewsletterService {
     if (active === 'false') q = q.eq('is_active', false);
 
     const { data, count } = await q;
+    const subs = data || [];
+
+    // Enrich each subscriber with the customer's name + phone IF their email
+    // matches a registered user (newsletter signup itself only collects email).
+    const emails = subs.map((s: any) => s.email).filter(Boolean);
+    const profileByEmail: Record<string, { name?: string; phone?: string }> = {};
+    if (emails.length) {
+      const { data: users } = await this.db.client
+        .from('users')
+        .select('name, email, phone')
+        .in('email', emails);
+      for (const u of users || []) {
+        if (u.email) profileByEmail[String(u.email).toLowerCase()] = { name: u.name, phone: u.phone };
+      }
+    }
+    const enriched = subs.map((s: any) => {
+      const p = profileByEmail[String(s.email || '').toLowerCase()] || {};
+      return { ...s, name: p.name || null, phone: p.phone || null };
+    });
+
     return {
-      data: data || [],
+      data: enriched,
       meta: { total: count ?? 0, page, limit, total_pages: Math.ceil((count ?? 0) / limit) },
     };
   }

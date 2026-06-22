@@ -38,6 +38,12 @@ CREATE INDEX IF NOT EXISTS idx_products_name_tsv ON products USING GIN (name_tsv
 -- ── PRODUCT VARIANTS: sort weight (030) ─────────────────────────────────────
 ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS sort_weight integer NOT NULL DEFAULT 0;
 
+-- Free the UNIQUE sku held by legacy soft-deleted (is_active=false) variants.
+-- Those rows were left by the OLD soft-delete and still reserve their SKU, which
+-- blocked re-adding the same colour/size/SKU on those specific products (the
+-- "some products can't add variants" report). Variant delete is now a hard delete.
+UPDATE product_variants SET sku = NULL WHERE is_active = false AND sku IS NOT NULL;
+
 -- ── REVIEWS: admin-seeded + enhancements (028 / 034) ────────────────────────
 ALTER TABLE reviews ALTER COLUMN user_id DROP NOT NULL;
 ALTER TABLE reviews ADD COLUMN IF NOT EXISTS guest_name       TEXT;

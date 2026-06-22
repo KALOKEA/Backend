@@ -25,6 +25,12 @@ jobs:
       - name: TypeScript compile check
         run: npm run build
 
+      - name: Unit tests
+        run: npm test
+
+      - name: npm audit (non-blocking — review advisories)
+        run: npm audit --audit-level=high || true
+
       - name: Check for stray debug files
         run: |
           if find src -name "*.js" | grep -v ".spec." | grep -q .; then
