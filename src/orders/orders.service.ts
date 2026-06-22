@@ -375,7 +375,23 @@ export class OrdersService {
         }
         if (ok !== true) {
           await rollbackStock();
-          throw new BadRequestException(`Insufficient stock for ${item.snapshot_name}`);
+          // Surface the REAL stock level so it's obvious whether this is a genuine
+          // shortfall (set stock in Admin → Inventory) or a deeper issue (a positive
+          // "have" here would mean the RPC/data is wrong, not the stock).
+          const { data: v } = await this.db.client
+            .from('product_variants')
+            .select('stock')
+            .eq('id', item.variant_id)
+            .maybeSingle();
+          const have = Number(v?.stock ?? 0);
+          this.logger.warn(
+            `COD stock shortfall: variant ${item.variant_id} have=${have} need=${item.quantity} (${item.snapshot_name})`,
+          );
+          throw new BadRequestException(
+            have > 0
+              ? `Only ${have} left in stock for ${item.snapshot_name}. Please reduce the quantity.`
+              : `${item.snapshot_name} is out of stock. (Set stock in Admin → Inventory or the product's Variants.)`,
+          );
         }
         reserved.push({ id: item.variant_id, qty: item.quantity });
       }
