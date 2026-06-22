@@ -259,20 +259,20 @@ describe('OrdersService.cancelOrder', () => {
       RAZORPAY_KEY_SECRET: 'rzp_test_secret',
     });
 
-    let updateCallCount = 0;
-    (db.client.from as jest.Mock).mockImplementation((table: string) => {
+    (db.client.from as jest.Mock).mockImplementation((_table: string) => {
       const q: any = {};
       const noop = () => q;
       q.select = noop; q.eq = noop; q.delete = noop;
       q.single = jest.fn().mockResolvedValue({ data: order });
       q.update = jest.fn().mockImplementation(() => {
-        updateCallCount++;
         const inner: any = {};
         inner.eq = jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
             select: jest.fn().mockReturnValue({
               single: jest.fn().mockResolvedValue({
-                data: updateCallCount === 1 ? { id: 'ord-1' } : null, // first call wins
+                // The guard (.eq('payment_status','paid').select().single()) wins,
+                // so the refund proceeds and the Razorpay API is called.
+                data: { id: 'ord-1' },
                 error: null,
               }),
             }),
@@ -345,24 +345,10 @@ describe('OrdersService.quote', () => {
       const q: any = {};
       const noop = () => q;
       q.select = noop; q.eq = noop; q.is = noop; q.order = noop; q.limit = noop;
-
-      if (table === 'carts') {
-        q.single = jest.fn().mockResolvedValue({ data: { id: 'cart-1' } });
-      } else if (table === 'cart_items') {
-        q.eq = jest.fn().mockReturnThis();
-        q.then = jest.fn().mockResolvedValue([cartItem]);
-        // Return cartItems on final resolution
-        Object.defineProperty(q, Symbol.asyncIterator, {
-          value: async function* () { yield* [cartItem]; },
-        });
-        // Make it await-able
-        q[Symbol.toStringTag] = 'Promise';
-        const realQ = { ...q };
-        realQ.then = undefined;
-        // Use a simpler mock approach
-        (db.client.from as jest.Mock).mockImplementationOnce(() => ({
-          select: () => ({ eq: () => Promise.resolve({ data: { id: 'cart-1' } }) }),
-        }));
+      // Guest fallback (cart_items passed in the DTO) resolves variants by id
+      // via product_variants.select(...).in('id', ids).
+      if (table === 'product_variants') {
+        q.in = jest.fn().mockResolvedValue({ data: [cartItem.product_variants] });
       }
       q.single = jest.fn().mockResolvedValue({ data: null });
       return q;
@@ -428,7 +414,7 @@ describe('OrdersService.findOne', () => {
     expect(result.order_number).toBe('KLK-G001');
   });
 
-  it('throws ForbiddenException when guest_email does not match', async () => {
+  it('throws NotFoundException (no info leak) when guest_email does not match', async () => {
     const order = {
       id: 'ord-g1',
       order_number: 'KLK-G001',
@@ -442,6 +428,6 @@ describe('OrdersService.findOne', () => {
     });
     const service = await makeService(db);
     await expect(service.findOne('ord-g1', undefined, 'wrong@test.com'))
-      .rejects.toThrow(ForbiddenException);
+      .rejects.toThrow(NotFoundException);
   });
 });
