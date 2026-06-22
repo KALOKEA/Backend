@@ -41,8 +41,8 @@ function buildDbMock(overrides: {
       } else if (table === 'coupon_uses') {
         // .select('id', { count: 'exact', head: true }) returns { count }
         q.select = jest.fn().mockReturnThis();
-        q.then = (_: any, __: any) =>
-          Promise.resolve({ count: usageCount, error: null });
+        q.then = (onF: any) =>
+          Promise.resolve({ count: usageCount, error: null }).then(onF);
       }
       return q;
     }),

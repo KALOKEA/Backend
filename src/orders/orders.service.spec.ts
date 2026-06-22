@@ -23,6 +23,7 @@ import { EmailService } from '../email/email.service';
 import { CouponsService } from '../coupons/coupons.service';
 import { SettingsService } from '../settings/settings.service';
 import { GstService } from '../gst/gst.service';
+import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { ConfigService } from '@nestjs/config';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 
@@ -84,6 +85,18 @@ function makeMockGst() {
   } as unknown as GstService;
 }
 
+function makeMockWhatsApp() {
+  return {
+    sendOrderConfirmation: jest.fn(),
+    sendCodConfirmation: jest.fn(),
+    sendOrderShipped: jest.fn(),
+    sendOrderDelivered: jest.fn(),
+    sendAbandonedCart: jest.fn(),
+    sendPaymentPending: jest.fn(),
+    sendNewLaunch: jest.fn(),
+  } as unknown as WhatsAppService;
+}
+
 function makeMockConfig(overrides: Record<string, string> = {}) {
   return {
     get: jest.fn((key: string) => overrides[key] ?? undefined),
@@ -127,6 +140,7 @@ async function makeService(
       OrdersService,
       { provide: DatabaseService, useValue: dbMock },
       { provide: EmailService, useValue: emailMock },
+      { provide: WhatsAppService, useValue: makeMockWhatsApp() },
       { provide: CouponsService, useValue: couponsMock },
       { provide: SettingsService, useValue: settingsMock },
       { provide: GstService, useValue: gstMock },
@@ -193,7 +207,7 @@ describe('OrdersService.cancelOrder', () => {
       const noop = () => q;
       q.select = noop; q.eq = noop; q.delete = noop; q.update = noop;
       q.single = jest.fn().mockResolvedValue({ data: order });
-      q.then = (_: any, __: any) => Promise.resolve({});
+      q.then = (onF: any) => Promise.resolve({}).then(onF);
       if (table === 'orders') {
         q.update = jest.fn().mockReturnValue({ eq: () => Promise.resolve({ error: null }) });
       }
@@ -222,7 +236,7 @@ describe('OrdersService.cancelOrder', () => {
       const noop = () => q;
       q.select = noop; q.eq = noop; q.update = noop; q.delete = noop;
       q.single = jest.fn().mockResolvedValue({ data: order });
-      q.then = (_: any, __: any) => Promise.resolve({});
+      q.then = (onF: any) => Promise.resolve({}).then(onF);
       return q;
     });
     (db.client as any).rpc = jest.fn().mockResolvedValue({ data: true });
@@ -264,12 +278,12 @@ describe('OrdersService.cancelOrder', () => {
             }),
           }),
           // simple eq for non-guarded updates
-          then: (_: any, __: any) => Promise.resolve({ error: null }),
+          then: (onF: any) => Promise.resolve({ error: null }).then(onF),
         });
-        inner.then = (_: any, __: any) => Promise.resolve({ error: null });
+        inner.then = (onF: any) => Promise.resolve({ error: null }).then(onF);
         return inner;
       });
-      q.then = (_: any, __: any) => Promise.resolve({});
+      q.then = (onF: any) => Promise.resolve({}).then(onF);
       return q;
     });
     (db.client as any).rpc = jest.fn().mockResolvedValue({ data: true });

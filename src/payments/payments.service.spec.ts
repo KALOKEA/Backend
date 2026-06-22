@@ -112,10 +112,10 @@ describe('PaymentsService', () => {
         q.select = noop; q.eq = noop; q.update = noop;
         q.maybeSingle = jest.fn().mockResolvedValue({ data: fakeOrder });
         // update chain
-        q.then = (_: any, __: any) => Promise.resolve({ data: {}, error: null });
+        q.then = (onF: any) => Promise.resolve({ data: {}, error: null }).then(onF);
         if (table === 'stock_reservations') {
           q.eq = noop;
-          q.then = (_: any, __: any) => Promise.resolve({});
+          q.then = (onF: any) => Promise.resolve({}).then(onF);
         }
         // decrement_stock rpc
         q.rpc = jest.fn().mockResolvedValue({ data: true });
@@ -198,10 +198,10 @@ describe('PaymentsService', () => {
         const noop = () => q;
         q.select = noop; q.eq = noop; q.update = noop; q.delete = noop;
         q.single = jest.fn().mockResolvedValue({ data: pendingOrder });
-        q.then = (_: any, __: any) => Promise.resolve({});
+        q.then = (onF: any) => Promise.resolve({}).then(onF);
         if (table === 'stock_reservations') {
           q.eq = noop;
-          q.then = (_: any, __: any) => Promise.resolve({});
+          q.then = (onF: any) => Promise.resolve({}).then(onF);
         }
         return q;
       });
@@ -274,7 +274,7 @@ describe('PaymentsService', () => {
         q.select = jest.fn().mockReturnThis();
         q.delete = jest.fn().mockReturnThis();
         q.single = jest.fn().mockResolvedValue({ data: failedOrder });
-        q.then = (_: any, __: any) => Promise.resolve({});
+        q.then = (onF: any) => Promise.resolve({}).then(onF);
         return q;
       });
 
@@ -316,7 +316,7 @@ describe('PaymentsService', () => {
         q.select = jest.fn().mockReturnThis();
         q.delete = jest.fn().mockReturnThis();
         q.single = jest.fn().mockResolvedValue({ data: failedGuestOrder });
-        q.then = (_: any, __: any) => Promise.resolve({});
+        q.then = (onF: any) => Promise.resolve({}).then(onF);
         return q;
       });
 
@@ -353,7 +353,7 @@ describe('PaymentsService', () => {
         q.select = jest.fn().mockReturnThis();
         q.single = jest.fn().mockResolvedValue({ data: failedOrder });
         q.delete = deleteMock;
-        q.then = (_: any, __: any) => Promise.resolve({});
+        q.then = (onF: any) => Promise.resolve({}).then(onF);
         return q;
       });
 
