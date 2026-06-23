@@ -38,6 +38,17 @@ CREATE INDEX IF NOT EXISTS idx_products_name_tsv ON products USING GIN (name_tsv
 -- ── PRODUCT VARIANTS: sort weight (030) ─────────────────────────────────────
 ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS sort_weight integer NOT NULL DEFAULT 0;
 
+-- ── updated_at for every set_updated_at() trigger table (041) ────────────────
+-- The trg_*_updated_at triggers set NEW.updated_at; a table missing this column
+-- makes EVERY update raise: record "new" has no field "updated_at". For
+-- product_variants that broke COD stock decrement. Guarantee the column exists.
+ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE users            ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE products         ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE carts            ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE orders           ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE returns          ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+
 -- Free the UNIQUE sku held by legacy soft-deleted (is_active=false) variants.
 -- Those rows were left by the OLD soft-delete and still reserve their SKU, which
 -- blocked re-adding the same colour/size/SKU on those specific products (the
