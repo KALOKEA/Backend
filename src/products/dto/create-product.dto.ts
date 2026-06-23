@@ -74,6 +74,12 @@ export class CreateProductDto {
   @IsString()
   youtube_url?: string;
 
+  /** Multiple product videos (YouTube links and/or uploaded mp4 URLs). */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  videos?: string[];
+
   @IsOptional()
   @IsNumber()
   sort_weight?: number;

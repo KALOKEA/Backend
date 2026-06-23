@@ -126,6 +126,22 @@ BEGIN
   UPDATE product_variants SET stock = stock + p_qty WHERE id = p_variant_id;
 END; $$;
 
+-- decrement_stock was MISSING from this catch-up script — that omission is why
+-- COD could fail with "Could not reserve stock". Atomic: only succeeds when
+-- enough stock is on hand. (Restored here + see migration 040.)
+CREATE OR REPLACE FUNCTION decrement_stock(p_variant_id uuid, p_qty integer)
+RETURNS boolean LANGUAGE plpgsql AS $$
+DECLARE affected integer;
+BEGIN
+  UPDATE product_variants SET stock = stock - p_qty
+   WHERE id = p_variant_id AND stock >= p_qty;
+  GET DIAGNOSTICS affected = ROW_COUNT;
+  RETURN affected > 0;
+END; $$;
+
+GRANT EXECUTE ON FUNCTION decrement_stock(uuid, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION restock_variant(uuid, integer) TO service_role;
+
 -- ── STOCK NOTIFICATIONS (027/031/032) — supports BOTH `notified` and `sent` ──
 CREATE TABLE IF NOT EXISTS stock_notifications (
   id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),

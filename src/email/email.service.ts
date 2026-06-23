@@ -64,6 +64,10 @@ export class EmailService {
    */
   private layout(opts: { preheader?: string; eyebrow?: string; heading: string; body: string; footerNote?: string }): string {
     const year = new Date().getFullYear();
+    // Set EMAIL_LOGO_URL in Railway to a hosted logo (e.g. a Cloudinary URL) to
+    // show the Kalokea logo image at the top of every email. If unset, the styled
+    // KALOKEA wordmark is used (always renders, no broken-image risk).
+    const logoUrl = this.config.get<string>('EMAIL_LOGO_URL') || '';
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -77,8 +81,10 @@ export class EmailService {
     <tr><td align="center" style="padding:32px 12px;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border:1px solid #e8e4e0;border-radius:8px;overflow:hidden;">
         <tr><td style="background:#0a0a0a;padding:26px 32px;text-align:center;">
-          <span style="font-family:Georgia,'Times New Roman',serif;font-size:24px;letter-spacing:7px;color:#ffffff;">KALOKEA</span>
-          <div style="font-family:Arial,Helvetica,sans-serif;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#7C4A2D;margin-top:4px;">Women&rsquo;s Fashion</div>
+          ${logoUrl
+            ? `<img src="${logoUrl}" alt="KALOKEA" height="44" style="height:44px;width:auto;display:inline-block;border:0;" />`
+            : `<span style="font-family:Georgia,'Times New Roman',serif;font-size:24px;letter-spacing:7px;color:#ffffff;">KALOKEA</span>
+          <div style="font-family:Arial,Helvetica,sans-serif;font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#7C4A2D;margin-top:4px;">Women&rsquo;s Fashion</div>`}
         </td></tr>
         <tr><td style="padding:38px 32px 34px;font-family:Arial,Helvetica,sans-serif;color:#0a0a0a;">
           ${opts.eyebrow ? `<p style="margin:0 0 10px;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#7C4A2D;">${opts.eyebrow}</p>` : ''}

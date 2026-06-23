@@ -19,6 +19,8 @@ export class UpdateProductDto {
   @IsOptional() @IsString()  video_url?: string;
   /** YouTube embed URL or video ID shown below the product description. */
   @IsOptional() @IsString()  youtube_url?: string;
+  /** Multiple product videos (YouTube links and/or uploaded mp4 URLs). */
+  @IsOptional() @IsArray() @IsString({ each: true })  videos?: string[];
   @IsOptional() @IsNumber()  sort_weight?: number;
   /** Fabric composition and care instructions. */
   @IsOptional() @IsString()  fabric_care?: string;

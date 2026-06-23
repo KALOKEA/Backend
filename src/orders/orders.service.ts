@@ -353,7 +353,14 @@ export class OrdersService {
     const reserved: Array<{ id: string; qty: number }> = [];
     const rollbackStock = async () => {
       for (const r of reserved) {
-        await this.db.client.rpc('restock_variant', { p_variant_id: r.id, p_qty: r.qty });
+        const { error: rsErr } = await this.db.client.rpc('restock_variant', { p_variant_id: r.id, p_qty: r.qty });
+        if (rsErr) {
+          // RPC unavailable — best-effort direct restock so stock isn't leaked.
+          const { data: rv } = await this.db.client
+            .from('product_variants').select('stock').eq('id', r.id).maybeSingle();
+          await this.db.client
+            .from('product_variants').update({ stock: Number(rv?.stock ?? 0) + r.qty }).eq('id', r.id);
+        }
       }
     };
     if (paymentMethod === 'cod') {
@@ -367,11 +374,36 @@ export class OrdersService {
         // decrement_stock (RPC not migrated, permissions, type mismatch) was shown
         // to the customer as "out of stock" on COD even when stock was available.
         if (decErr) {
-          await rollbackStock();
+          // The atomic decrement_stock RPC failed — most commonly a stale
+          // PostgREST schema cache or the function missing on this DB. Rather
+          // than fail the sale, fall back to a guarded direct decrement so COD
+          // still completes. (Run migration 040 / MASTER_SETUP.sql to restore
+          // the fast atomic path.)
           this.logger.error(
-            `decrement_stock failed for variant ${item.variant_id} (qty ${item.quantity}): ${decErr.message || decErr}`,
+            `decrement_stock RPC failed for variant ${item.variant_id} (qty ${item.quantity}): ${decErr.message || decErr} — using fallback decrement`,
           );
-          throw new InternalServerErrorException('Could not reserve stock for this order. Please try again.');
+          const { data: fv } = await this.db.client
+            .from('product_variants').select('stock').eq('id', item.variant_id).maybeSingle();
+          const fallbackHave = Number(fv?.stock ?? 0);
+          if (fallbackHave < item.quantity) {
+            await rollbackStock();
+            throw new BadRequestException(
+              fallbackHave > 0
+                ? `Only ${fallbackHave} left in stock for ${item.snapshot_name}. Please reduce the quantity.`
+                : `${item.snapshot_name} is out of stock. (Set stock in Admin → Inventory or the product's Variants.)`,
+            );
+          }
+          const { error: fUpdErr } = await this.db.client
+            .from('product_variants')
+            .update({ stock: fallbackHave - item.quantity })
+            .eq('id', item.variant_id)
+            .gte('stock', item.quantity);
+          if (fUpdErr) {
+            await rollbackStock();
+            throw new InternalServerErrorException('Could not reserve stock for this order. Please try again.');
+          }
+          reserved.push({ id: item.variant_id, qty: item.quantity });
+          continue;
         }
         if (ok !== true) {
           await rollbackStock();
