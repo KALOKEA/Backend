@@ -365,10 +365,28 @@ export class OrdersService {
     };
     if (paymentMethod === 'cod') {
       for (const item of b.orderItems) {
-        const { data: ok, error: decErr } = await this.db.client.rpc('decrement_stock', {
-          p_variant_id: item.variant_id,
-          p_qty: item.quantity,
-        });
+        // Reserve stock with a guarded direct UPDATE — no custom DB function, so
+        // COD can't fail on a missing/stale decrement_stock RPC (the real cause of
+        // the "Could not reserve stock" 500). The .gte guard keeps stock from going
+        // negative; computeBreakdown already verified availability above. ok/decErr
+        // mirror the old RPC contract so the branches below stay unchanged.
+        const { data: curV } = await this.db.client
+          .from('product_variants').select('stock').eq('id', item.variant_id).maybeSingle();
+        const curStock = Number(curV?.stock ?? 0);
+        let ok: boolean | null = null;
+        let decErr: any = null;
+        if (curStock >= item.quantity) {
+          const { data: upd, error: uErr } = await this.db.client
+            .from('product_variants')
+            .update({ stock: curStock - item.quantity })
+            .eq('id', item.variant_id)
+            .gte('stock', item.quantity)
+            .select('id');
+          decErr = uErr;
+          ok = !uErr && Array.isArray(upd) && upd.length > 0;
+        } else {
+          ok = false;
+        }
         // Separate a real DB/RPC failure from a genuine stock shortfall.
         // Previously both collapsed into "Insufficient stock", so ANY error from
         // decrement_stock (RPC not migrated, permissions, type mismatch) was shown
@@ -486,8 +504,20 @@ export class OrdersService {
     // COD is a committed sale → confirmation + receipt + invoice email and GST
     // ledger now. Razorpay does both on payment.captured (webhook).
     if (paymentMethod === 'cod') {
-      await this.gst.postSaleLedger(order.id);
-      await this.sendConfirmationEmails(order.id);
+      // Post-sale side-effects on an ALREADY-COMMITTED order — never let them 500
+      // the response. The order + items are persisted and stock is reserved; a
+      // failed ledger or email is logged for reconciliation, not shown to the
+      // customer. (Without this, a Brevo/ledger hiccup would fail a valid COD order.)
+      try {
+        await this.gst.postSaleLedger(order.id);
+      } catch (e: any) {
+        this.logger.error(`GST ledger failed for order ${order.order_number}: ${e?.message || e}`);
+      }
+      try {
+        await this.sendConfirmationEmails(order.id);
+      } catch (e: any) {
+        this.logger.error(`Confirmation email/receipt failed for order ${order.order_number}: ${e?.message || e}`);
+      }
     }
 
     // Razorpay: create soft-reservations (TTL 15 min). These hold the units so
