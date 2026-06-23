@@ -418,7 +418,11 @@ export class OrdersService {
             .gte('stock', item.quantity);
           if (fUpdErr) {
             await rollbackStock();
-            throw new InternalServerErrorException('Could not reserve stock for this order. Please try again.');
+            // Surface the REAL database error so a deployed failure is self-diagnosing
+            // (permission/RLS/trigger/missing column) instead of an opaque message.
+            throw new InternalServerErrorException(
+              `Stock reserve failed: ${fUpdErr.message || (decErr && decErr.message) || 'database update error'}`,
+            );
           }
           reserved.push({ id: item.variant_id, qty: item.quantity });
           continue;
