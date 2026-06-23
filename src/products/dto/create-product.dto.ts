@@ -20,6 +20,12 @@ export class CreateProductDto {
   @IsString()
   slug: string;
 
+  /** Master product SKU — admin-set, editable, optional. Variants inherit this
+   *  unless they carry their own per-variant override. Not forced unique. */
+  @IsOptional()
+  @IsString()
+  sku?: string;
+
   @IsOptional()
   @IsString()
   description?: string;

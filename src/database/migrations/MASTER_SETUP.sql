@@ -49,6 +49,13 @@ ALTER TABLE carts            ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT
 ALTER TABLE orders           ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
 ALTER TABLE returns          ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
 
+-- ── PRODUCT-LEVEL SKU + relax variant SKU uniqueness (042) ──────────────────
+-- One master SKU per product (admin-set). Drop the global UNIQUE on variant SKU
+-- so variants can share it / inherit it — this is what blocked "add variants".
+ALTER TABLE products ADD COLUMN IF NOT EXISTS sku text;
+ALTER TABLE product_variants DROP CONSTRAINT IF EXISTS product_variants_sku_key;
+CREATE INDEX IF NOT EXISTS idx_variants_sku ON product_variants (sku);
+
 -- Free the UNIQUE sku held by legacy soft-deleted (is_active=false) variants.
 -- Those rows were left by the OLD soft-delete and still reserve their SKU, which
 -- blocked re-adding the same colour/size/SKU on those specific products (the

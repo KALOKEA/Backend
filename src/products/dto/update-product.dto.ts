@@ -5,6 +5,7 @@ import { ProductFaqDto } from './create-product.dto';
 export class UpdateProductDto {
   @IsOptional() @IsString()  name?: string;
   @IsOptional() @IsString()  slug?: string;
+  @IsOptional() @IsString()  sku?: string;
   @IsOptional() @IsString()  description?: string;
   @IsOptional() @IsUUID()    category_id?: string;
   @IsOptional() @IsNumber()  base_price?: number;

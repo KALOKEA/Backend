@@ -18,21 +18,13 @@ export class VariantsService {
     return data;
   }
 
-  // Build a guaranteed-unique fallback SKU (random suffix) when the admin doesn't
-  // supply their own. The old code generated `KLK-<id>-<colour|NA>-<size|NA>` which
-  // COLLIDED on the UNIQUE(sku) constraint for single-option products (NA-NA) and
-  // when re-adding a variant whose old row was only soft-deleted — that surfaced as
-  // "cannot add variant". The random suffix removes that whole class of failure.
-  private buildAutoSku(productId: string, colour?: string, size?: string): string {
-    const clean = (s?: string) => (s || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 4).toUpperCase();
-    const mid = [clean(colour), clean(size)].filter(Boolean).join('');
-    const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
-    return ['KLK', productId.slice(0, 6).toUpperCase(), mid, rand].filter(Boolean).join('-');
-  }
-
   async create(dto: CreateVariantDto) {
-    // Use the admin-supplied SKU as-is; only auto-generate when left blank.
-    const sku = dto.sku?.trim() || this.buildAutoSku(dto.product_id, dto.colour, dto.size);
+    // SKU model: the master SKU lives on the PRODUCT. A variant SKU is OPTIONAL —
+    // blank means "inherit the product SKU" (resolved in the admin UI / exports).
+    // We store NULL when blank and no longer force a globally-unique value, so
+    // variants can share the product SKU and adding variants never fails on a SKU
+    // clash (old UNIQUE(sku) + truncated auto-SKU was the "cannot add variant" bug).
+    const sku = dto.sku?.trim() || null;
     const { data, error } = await this.db.client
       .from('product_variants')
       .insert({ ...dto, sku })
