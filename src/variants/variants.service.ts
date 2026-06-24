@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, InternalServerErrorException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { CreateVariantDto } from './dto/create-variant.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
@@ -31,10 +31,18 @@ export class VariantsService {
       .select()
       .single();
     if (error) {
-      if ((error as any).code === '23505') {
-        throw new ConflictException(`SKU "${sku}" is already in use. Please enter a different SKU.`);
+      const code = (error as any).code;
+      const message = (error as any).message || String(error);
+      // Duplicate SKU (or any unique clash): clear, actionable message — not a 500.
+      if (code === '23505' || /duplicate|unique/i.test(message)) {
+        throw new ConflictException(
+          'A variant with this SKU already exists. Leave the SKU blank to inherit the product SKU, or enter a different one.',
+        );
       }
-      throw error;
+      // Surface the REAL Postgres error + code instead of an opaque 500, so any
+      // remaining failure (missing column 42703, FK 23503, NOT NULL 23502, stale
+      // PostgREST cache PGRST…) is immediately diagnosable from the client/console.
+      throw new InternalServerErrorException(`Add variant failed: ${message}${code ? ` [${code}]` : ''}`);
     }
     return data;
   }
