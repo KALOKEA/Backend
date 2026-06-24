@@ -23,6 +23,15 @@ export class ReviewsController {
     return this.reviews.findByProduct(productId);
   }
 
+  /** Public: genuine featured reviews for the homepage social-proof section. */
+  @Public()
+  @UseInterceptors(CacheInterceptor)
+  @CacheTTL(120000)
+  @Get('featured')
+  findFeatured() {
+    return this.reviews.findFeatured();
+  }
+
   @Throttle({ default: { limit: 5, ttl: 60000 } }) // 5 reviews/min per IP
   @Post()
   create(@Body() dto: CreateReviewDto, @CurrentUser() user: any) {

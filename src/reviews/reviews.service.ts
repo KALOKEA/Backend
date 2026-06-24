@@ -21,6 +21,33 @@ export class ReviewsService {
     return data || [];
   }
 
+  /**
+   * Public: a small set of recent, APPROVED, high-rating reviews that have real
+   * text — powers the homepage social-proof section with genuine customer voices
+   * instead of hardcoded testimonials. Returns [] when there aren't enough real
+   * reviews yet, so the homepage simply hides the section (it never shows fakes).
+   */
+  async findFeatured(limit = 6) {
+    const { data } = await this.db.client
+      .from('reviews')
+      .select('id, rating, title, body, guest_name, created_at, users(name), products(name, slug)')
+      .eq('is_approved', true)
+      .gte('rating', 4)
+      .order('created_at', { ascending: false })
+      .limit(limit * 3);
+    return (data || [])
+      .filter((r: any) => (r.body || '').trim().length >= 20)
+      .slice(0, limit)
+      .map((r: any) => ({
+        id: r.id,
+        rating: r.rating,
+        text: (r.body || '').trim(),
+        author: r.users?.name || r.guest_name || 'Verified Buyer',
+        product: r.products?.name || '',
+        product_slug: r.products?.slug || '',
+      }));
+  }
+
   async create(dto: CreateReviewDto, userId: string) {
     // Verify purchase — allow paid online orders OR delivered COD orders (M-10)
     const { data: verifyRows } = await this.db.client
