@@ -4,11 +4,13 @@ import { Response } from 'express';
 import { NewsletterService } from './newsletter.service';
 import { SubscribeDto } from './dto/subscribe.dto';
 import { Public } from '../common/decorators/public.decorator';
-import { AdminGuard } from '../common/guards/admin.guard';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { Permission } from '../common/decorators/permission.decorator';
 import { UseGuards } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 
 @ApiTags('newsletter')
+@Permission('newsletter')
 @Controller('newsletter')
 export class NewsletterController {
   constructor(private newsletter: NewsletterService) {}
@@ -70,7 +72,7 @@ a{display:inline-block;padding:11px 28px;background:#0a0a0a;color:#fff;text-deco
   }
 
   /** Admin: paginated subscriber list */
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Get('admin/subscribers')
   listSubscribers(
     @Query('page') page = '1',
@@ -81,14 +83,14 @@ a{display:inline-block;padding:11px 28px;background:#0a0a0a;color:#fff;text-deco
   }
 
   /** Admin: stats summary (total, active, unsubscribed, campaigns) */
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Get('admin/stats')
   getStats() {
     return this.newsletter.getStats();
   }
 
   /** Admin: send campaign to all active subscribers */
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @HttpCode(200)
   @Post('admin/send-campaign')
   sendCampaign(
@@ -103,7 +105,7 @@ a{display:inline-block;padding:11px 28px;background:#0a0a0a;color:#fff;text-deco
   }
 
   /** Admin: list past campaigns */
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Get('admin/campaigns')
   listCampaigns(
     @Query('page') page = '1',
@@ -113,7 +115,7 @@ a{display:inline-block;padding:11px 28px;background:#0a0a0a;color:#fff;text-deco
   }
 
   /** Admin: CSV export of all active subscribers */
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Get('admin/export')
   async exportSubscribers(@Res() res: Response) {
     const csv = await this.newsletter.exportCsv();

@@ -3,11 +3,13 @@ import { CouponsService } from './coupons.service';
 import { CreateCouponDto } from './dto/create-coupon.dto';
 import { ValidateCouponDto } from './dto/validate-coupon.dto';
 import { Public } from '../common/decorators/public.decorator';
-import { AdminGuard } from '../common/guards/admin.guard';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { Permission } from '../common/decorators/permission.decorator';
 import { ApiTags } from '@nestjs/swagger';
 
 @ApiTags('coupons')
+@Permission('coupons')
 @Controller('coupons')
 export class CouponsController {
   constructor(private coupons: CouponsService) {}
@@ -24,27 +26,27 @@ export class CouponsController {
     return this.coupons.bestOffer(Number(price));
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Get()
   findAll() {
     return this.coupons.findAll();
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('coupon.create')
   @Post()
   create(@Body() dto: CreateCouponDto) {
     return this.coupons.create(dto);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('coupon.update')
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: Partial<CreateCouponDto>) {
     return this.coupons.update(id, dto);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('coupon.toggle')
   @Patch(':id/toggle')
   toggle(@Param('id') id: string) {

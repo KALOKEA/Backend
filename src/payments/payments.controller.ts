@@ -4,7 +4,8 @@ import { CreatePaymentOrderDto } from './dto/create-payment-order.dto';
 import { RefundDto } from './dto/refund.dto';
 import { VerifyPaymentDto } from './dto/verify-payment.dto';
 import { Public } from '../common/decorators/public.decorator';
-import { AdminGuard } from '../common/guards/admin.guard';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { Permission } from '../common/decorators/permission.decorator';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Request } from 'express';
@@ -22,7 +23,8 @@ export class PaymentsController {
     return this.payments.createRazorpayOrder(dto.order_id, user?.id);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
+  @Permission('orders')
   @AdminAction('payment.refund')
   @Post('refund')
   refund(@Body() dto: RefundDto) {

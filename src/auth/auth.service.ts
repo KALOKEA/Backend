@@ -191,7 +191,7 @@ export class AuthService {
       { secret: this.config.getOrThrow('JWT_REFRESH_SECRET'), expiresIn: '30d' },
     );
 
-    return { access_token, refresh_token, user: { id: user.id, name: user.name, role: user.role } };
+    return { access_token, refresh_token, user: { id: user.id, name: user.name, role: user.role, permissions: Array.isArray(user.permissions) ? user.permissions : [] } };
   }
 
   async refresh(token: string) {
@@ -267,7 +267,7 @@ export class AuthService {
   async getMe(userId: string) {
     const { data: user } = await this.db.client
       .from('users')
-      .select('id, name, email, phone, role, created_at')
+      .select('id, name, email, phone, role, permissions, created_at')
       .eq('id', userId)
       .maybeSingle();
     return user;

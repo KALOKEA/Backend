@@ -3,12 +3,14 @@ import { Throttle } from '@nestjs/throttler';
 import { ReturnsService } from './returns.service';
 import { CreateReturnDto } from './dto/create-return.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { AdminGuard } from '../common/guards/admin.guard';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { Permission } from '../common/decorators/permission.decorator';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('returns')
 @ApiBearerAuth('access-token')
+@Permission('returns')
 @Controller('returns')
 export class ReturnsController {
   constructor(private returns: ReturnsService) {}
@@ -24,13 +26,13 @@ export class ReturnsController {
     return this.returns.findByUser(user.id);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Get()
   findAll() {
     return this.returns.findAll();
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('return.status_change')
   @Patch(':id/status')
   updateStatus(

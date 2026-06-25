@@ -3,7 +3,8 @@ import {
   UseGuards, Logger, HttpCode
 } from '@nestjs/common';
 import { Public } from '../common/decorators/public.decorator';
-import { AdminGuard } from '../common/guards/admin.guard';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { Permission } from '../common/decorators/permission.decorator';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
 import { ShiprocketService } from './shiprocket.service';
 import { ConfigService } from '@nestjs/config';
@@ -11,6 +12,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('shiprocket')
 @ApiBearerAuth('access-token')
+@Permission('shipments')
 @Controller('shiprocket')
 export class ShiprocketController {
   private readonly logger = new Logger(ShiprocketController.name);
@@ -21,7 +23,7 @@ export class ShiprocketController {
   ) {}
 
   // ─── Admin: Push order to ShipRocket + auto-assign AWB ───────────────────────
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('shiprocket.push_order')
   @Post('orders/:id/push')
   pushOrder(
@@ -32,7 +34,7 @@ export class ShiprocketController {
   }
 
   // ─── Admin: Manually assign / reassign AWB ────────────────────────────────────
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('shiprocket.assign_awb')
   @Post('orders/:id/awb')
   assignAwb(@Param('id') id: string, @Body() body: { courier_id?: number }) {
@@ -40,14 +42,14 @@ export class ShiprocketController {
   }
 
   // ─── Admin: Generate shipping label ──────────────────────────────────────────
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Post('orders/:id/label')
   generateLabel(@Param('id') id: string) {
     return this.sr.generateLabel(id);
   }
 
   // ─── Admin: Schedule pickup ───────────────────────────────────────────────────
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('shiprocket.schedule_pickup')
   @Post('orders/:id/pickup')
   schedulePickup(@Param('id') id: string) {
@@ -55,14 +57,14 @@ export class ShiprocketController {
   }
 
   // ─── Admin: Track shipment ───────────────────────────────────────────────────
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Get('orders/:id/track')
   trackShipment(@Param('id') id: string) {
     return this.sr.trackShipment(id);
   }
 
   // ─── Admin: Cancel shipment ──────────────────────────────────────────────────
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('shiprocket.cancel')
   @Post('orders/:id/cancel')
   cancelShipment(@Param('id') id: string) {
@@ -70,14 +72,14 @@ export class ShiprocketController {
   }
 
   // ─── Admin: Courier serviceability ───────────────────────────────────────────
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Get('serviceability/:pincode')
   getServiceability(@Param('pincode') pincode: string) {
     return this.sr.getServiceability(pincode);
   }
 
   // ─── Admin: Generate manifest PDF ────────────────────────────────────────────
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('shiprocket.manifest')
   @Post('manifest')
   generateManifest(@Body() body: { shipment_ids: number[] }) {
@@ -85,21 +87,21 @@ export class ShiprocketController {
   }
 
   // ─── Admin: Bulk sync tracking for all active shipments ───────────────────────
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Post('sync-tracking')
   syncTracking() {
     return this.sr.syncTrackingAll();
   }
 
   // ─── Admin: NDR list ─────────────────────────────────────────────────────────
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Get('ndrs')
   getNdrs() {
     return this.sr.getNdrs();
   }
 
   // ─── Admin: NDR action ───────────────────────────────────────────────────────
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('shiprocket.ndr_action')
   @Post('ndrs/:shipmentId/action')
   ndrAction(
@@ -110,7 +112,7 @@ export class ShiprocketController {
   }
 
   // ─── Admin: Create return / reverse pickup ────────────────────────────────────
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('shiprocket.return_pickup')
   @Post('orders/:id/return')
   createReturnPickup(@Param('id') id: string) {
@@ -118,20 +120,20 @@ export class ShiprocketController {
   }
 
   // ─── Admin: COD remittance ────────────────────────────────────────────────────
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Get('remittance')
   getCodRemittance() {
     return this.sr.getCodRemittance();
   }
 
   // ─── Admin: Packaging profiles ────────────────────────────────────────────────
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Get('packaging-profiles')
   getPackagingProfiles() {
     return this.sr.getPackagingProfiles();
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Post('packaging-profiles')
   createPackagingProfile(@Body() body: {
     name: string; weight: number; length: number;
@@ -140,13 +142,13 @@ export class ShiprocketController {
     return this.sr.createPackagingProfile(body);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Delete('packaging-profiles/:id')
   deletePackagingProfile(@Param('id') id: string) {
     return this.sr.deletePackagingProfile(id);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Patch('packaging-profiles/:id/default')
   setDefaultProfile(@Param('id') id: string) {
     return this.sr.setDefaultPackagingProfile(id);
