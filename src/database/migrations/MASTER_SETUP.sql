@@ -211,6 +211,54 @@ ALTER TABLE cms_pages        ALTER COLUMN meta_description TYPE TEXT USING meta_
 ALTER TABLE homepage_content ALTER COLUMN value            TYPE TEXT USING value::text;
 ALTER TABLE site_content     ALTER COLUMN value            TYPE TEXT USING value::text;
 
+-- ── STAFF RBAC (043) ─────────────────────────────────────────────────────────
+-- Adds the 'staff' role + per-user permissions array for limited admin access.
+DO $$
+DECLARE
+  c text;
+BEGIN
+  SELECT conname INTO c
+  FROM pg_constraint
+  WHERE conrelid = 'users'::regclass
+    AND contype = 'c'
+    AND pg_get_constraintdef(oid) ILIKE '%role%';
+  IF c IS NOT NULL THEN
+    EXECUTE format('ALTER TABLE users DROP CONSTRAINT %I', c);
+  END IF;
+END $$;
+ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('customer', 'admin', 'staff'));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions jsonb NOT NULL DEFAULT '[]'::jsonb;
+CREATE INDEX IF NOT EXISTS idx_users_role_staff ON users (created_at DESC) WHERE role IN ('admin', 'staff');
+
+-- ── BLOG / JOURNAL CMS (044) ─────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS blog_posts (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  slug            text NOT NULL UNIQUE,
+  title           text NOT NULL,
+  heading         text,
+  heading_italic  text,
+  eyebrow         text,
+  excerpt         text,
+  description     text,
+  content         text,
+  cover_image     text,
+  keywords        jsonb NOT NULL DEFAULT '[]'::jsonb,
+  reading_time    text,
+  author          text,
+  status          text NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published')),
+  published_at    timestamptz,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_blog_posts_status_published ON blog_posts (status, published_at DESC);
+CREATE INDEX IF NOT EXISTS idx_blog_posts_slug ON blog_posts (slug);
+ALTER TABLE blog_posts ENABLE ROW LEVEL SECURITY;
+CREATE OR REPLACE FUNCTION set_blog_posts_updated_at()
+RETURNS trigger AS $$ BEGIN NEW.updated_at = now(); RETURN NEW; END; $$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS trg_blog_posts_updated_at ON blog_posts;
+CREATE TRIGGER trg_blog_posts_updated_at
+  BEFORE UPDATE ON blog_posts FOR EACH ROW EXECUTE FUNCTION set_blog_posts_updated_at();
+
 -- ── GRANTS (PostgREST uses service_role) + reload schema cache ───────────────
 GRANT ALL ON ALL TABLES    IN SCHEMA public TO service_role;
 GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO service_role;

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { sanitisePermissions } from '../common/auth/permissions';
 
 @Injectable()
 export class UsersService {
@@ -9,7 +10,7 @@ export class UsersService {
   async findOne(id: string) {
     const { data } = await this.db.client
       .from('users')
-      .select('id, name, email, phone, role, created_at')
+      .select('id, name, email, phone, role, permissions, created_at')
       .eq('id', id)
       .single();
     if (!data) throw new NotFoundException('User not found');
@@ -177,5 +178,131 @@ export class UsersService {
       .order('created_at', { ascending: false })
       .limit(limit);
     return data || [];
+  }
+
+  // ── Staff & access management (RBAC, owner/admin only) ──────────────────────
+
+  /** List all admin + staff accounts with their granted permissions. */
+  async listStaff() {
+    const { data } = await this.db.client
+      .from('users')
+      .select('id, name, email, phone, role, permissions, created_at')
+      .in('role', ['admin', 'staff'])
+      .order('created_at', { ascending: false });
+    return (data || []).map((u: any) => ({
+      ...u,
+      permissions: Array.isArray(u.permissions) ? u.permissions : [],
+    }));
+  }
+
+  /**
+   * Create (or promote) a staff member with a limited set of permissions.
+   * Login is OTP-based, so the staff member signs in with the email/phone set
+   * here. If a user row already exists for that email/phone it is promoted to
+   * `staff` (an existing customer can be made staff); otherwise a new row is
+   * created.
+   */
+  async createStaff(dto: { name?: string; email?: string; phone?: string; permissions?: unknown }) {
+    const email = dto.email?.trim() || null;
+    const phone = dto.phone?.trim() || null;
+    if (!email && !phone) {
+      throw new BadRequestException('Email or phone is required to create a staff login');
+    }
+    const permissions = sanitisePermissions(dto.permissions);
+
+    // Look for an existing user by email or phone (PostgREST-safe explicit lookup).
+    const baseQuery = this.db.client.from('users').select('id, role');
+    const { data: existing } = await (email
+      ? baseQuery.eq('email', email)
+      : baseQuery.eq('phone', phone!)
+    ).maybeSingle();
+
+    if (existing) {
+      if (existing.role === 'admin') {
+        throw new BadRequestException('This account is already a full admin and cannot be downgraded to staff here.');
+      }
+      const { data, error } = await this.db.client
+        .from('users')
+        .update({
+          role: 'staff',
+          permissions,
+          ...(dto.name?.trim() ? { name: dto.name.trim() } : {}),
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', existing.id)
+        .select('id, name, email, phone, role, permissions, created_at')
+        .single();
+      if (error) throw new BadRequestException(error.message);
+      return data;
+    }
+
+    const { data, error } = await this.db.client
+      .from('users')
+      .insert({
+        name: dto.name?.trim() || null,
+        email,
+        phone,
+        role: 'staff',
+        permissions,
+      })
+      .select('id, name, email, phone, role, permissions, created_at')
+      .single();
+    if (error) throw new BadRequestException(error.message);
+    return data;
+  }
+
+  /** Update a staff member's name and/or granted permissions. */
+  async updateStaff(id: string, dto: { name?: string; permissions?: unknown }) {
+    const { data: target } = await this.db.client
+      .from('users')
+      .select('id, role')
+      .eq('id', id)
+      .maybeSingle();
+    if (!target) throw new NotFoundException('Staff member not found');
+    if (target.role !== 'staff') {
+      throw new BadRequestException('This account is not a staff member.');
+    }
+
+    const updates: Record<string, any> = { updated_at: new Date().toISOString() };
+    if (dto.name !== undefined) updates.name = dto.name?.trim() || null;
+    if (dto.permissions !== undefined) updates.permissions = sanitisePermissions(dto.permissions);
+
+    const { data, error } = await this.db.client
+      .from('users')
+      .update(updates)
+      .eq('id', id)
+      .select('id, name, email, phone, role, permissions, created_at')
+      .single();
+    if (error || !data) throw new NotFoundException('Staff member not found');
+    return data;
+  }
+
+  /**
+   * Revoke a staff member's admin access: reset to a normal customer with no
+   * permissions, and bump token_version so any active admin session is killed
+   * immediately (rather than waiting for the 5-minute permission cache).
+   */
+  async revokeStaff(id: string) {
+    const { data: target } = await this.db.client
+      .from('users')
+      .select('id, role, token_version')
+      .eq('id', id)
+      .maybeSingle();
+    if (!target) throw new NotFoundException('Staff member not found');
+    if (target.role !== 'staff') {
+      throw new BadRequestException('This account is not a staff member.');
+    }
+
+    const { error } = await this.db.client
+      .from('users')
+      .update({
+        role: 'customer',
+        permissions: [],
+        token_version: (target.token_version ?? 0) + 1,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id);
+    if (error) throw new BadRequestException(error.message);
+    return { message: 'Staff access revoked' };
   }
 }

@@ -39,6 +39,7 @@ import { CmsModule } from './cms/cms.module';
 import { InstagramFeedModule } from './instagram-feed/instagram-feed.module';
 import { StockNotificationsModule } from './stock-notifications/stock-notifications.module';
 import { WhatsAppModule } from './whatsapp/whatsapp.module';
+import { BlogModule } from './blog/blog.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { validate } from './config/env.validation';
 
@@ -101,6 +102,7 @@ import { validate } from './config/env.validation';
     CmsModule,
     InstagramFeedModule,
     StockNotificationsModule,
+    BlogModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

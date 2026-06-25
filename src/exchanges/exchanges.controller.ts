@@ -2,12 +2,14 @@ import { Controller, Get, Post, Patch, Body, Param, UseGuards } from '@nestjs/co
 import { ExchangesService } from './exchanges.service';
 import { CreateExchangeDto } from './dto/create-exchange.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { AdminGuard } from '../common/guards/admin.guard';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { Permission } from '../common/decorators/permission.decorator';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('exchanges')
 @ApiBearerAuth('access-token')
+@Permission('exchanges')
 @Controller('exchanges')
 export class ExchangesController {
   constructor(private exchanges: ExchangesService) {}
@@ -27,13 +29,13 @@ export class ExchangesController {
     return this.exchanges.getOptions(orderItemId, user.id);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Get()
   findAll() {
     return this.exchanges.findAll();
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('exchange.status_change')
   @Patch(':id/status')
   updateStatus(

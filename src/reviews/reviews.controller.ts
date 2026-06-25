@@ -5,12 +5,14 @@ import { ReviewsService } from './reviews.service';
 import { CreateReviewDto } from './dto/create-review.dto';
 import { AdminCreateReviewDto } from './dto/admin-create-review.dto';
 import { Public } from '../common/decorators/public.decorator';
-import { AdminGuard } from '../common/guards/admin.guard';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { Permission } from '../common/decorators/permission.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
 import { ApiTags } from '@nestjs/swagger';
 
 @ApiTags('reviews')
+@Permission('reviews')
 @Controller('reviews')
 export class ReviewsController {
   constructor(private reviews: ReviewsService) {}
@@ -43,7 +45,7 @@ export class ReviewsController {
     return this.reviews.findByUser(user.id);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Get('admin/all')
   findAll(
     @Query('page') page = '1',
@@ -52,41 +54,41 @@ export class ReviewsController {
     return this.reviews.findAll(+page, +limit);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Get('pending')
   findPending() {
     return this.reviews.findPending();
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('review.create')
   @Post('admin/create')
   adminCreate(@Body() dto: AdminCreateReviewDto) {
     return this.reviews.adminCreate(dto);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('review.approve')
   @Patch(':id/approve')
   approve(@Param('id') id: string) {
     return this.reviews.approve(id);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('review.reject')
   @Delete(':id/reject')
   reject(@Param('id') id: string) {
     return this.reviews.reject(id);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('review.reply')
   @Post(':id/reply')
   reply(@Param('id') id: string, @Body('reply') reply: string) {
     return this.reviews.replyToReview(id, reply);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('review.flag')
   @HttpCode(200)
   @Post(':id/flag')

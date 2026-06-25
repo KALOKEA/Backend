@@ -6,7 +6,8 @@ import { CreateOrderDto } from './dto/create-order.dto';
 import { QuoteOrderDto } from './dto/quote-order.dto';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { AdminGuard } from '../common/guards/admin.guard';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { Permission } from '../common/decorators/permission.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { Public } from '../common/decorators/public.decorator';
@@ -14,6 +15,7 @@ import { AdminAction } from '../common/decorators/admin-action.decorator';
 import { ApiTags } from '@nestjs/swagger';
 
 @ApiTags('orders')
+@Permission('orders')
 @Controller('orders')
 export class OrdersController {
   constructor(private orders: OrdersService) {}
@@ -52,7 +54,7 @@ export class OrdersController {
    * Admin: list ALL orders with pagination + optional status filter.
    * Static route — MUST be declared before :id to avoid route ambiguity.
    */
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Get()
   listAllOrders(
     @Query('page') page = '1',
@@ -64,7 +66,7 @@ export class OrdersController {
   }
 
   /** Admin: export all orders as CSV. Static route MUST be declared before :id. */
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Get('export')
   async exportCsv(
     @Res() res: Response,
@@ -119,7 +121,7 @@ export class OrdersController {
    * Admin: update order status (shipped, delivered, cancelled, etc.).
    * Triggers customer email for each status transition.
    */
-  @UseGuards(JwtAuthGuard, AdminGuard)
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
   @AdminAction('order.status_change')
   @Patch(':id/status')
   updateStatus(

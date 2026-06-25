@@ -4,7 +4,7 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { UploadService } from './upload.service';
-import { AdminGuard } from '../common/guards/admin.guard';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 const MAX_SIZE_IMAGE = 5 * 1024 * 1024;   // 5 MB
@@ -70,7 +70,7 @@ export class UploadController {
   constructor(private upload: UploadService) {}
 
   /** Admin-only: product / banner images. */
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Post('image')
   @UseInterceptors(
     FileInterceptor('file', {
@@ -102,7 +102,7 @@ export class UploadController {
    * Admin-only: upload image OR video for homepage/editorial/hero content.
    * Accepts JPEG, PNG, WebP, MP4, MOV, WebM (max 100 MB for videos).
    */
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Post('admin-media')
   @UseInterceptors(
     FileInterceptor('file', {

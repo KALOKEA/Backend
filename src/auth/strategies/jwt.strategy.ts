@@ -9,7 +9,7 @@ import { DatabaseService } from '../../database/database.service';
  * Avoids a DB round-trip on every request while still catching revocations
  * within a short window (5 minutes). Use Redis if sub-minute revocation matters.
  */
-interface CacheEntry { version: number; ts: number }
+interface CacheEntry { version: number; role: string; permissions: string[]; ts: number }
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 @Injectable()
@@ -37,26 +37,38 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       const cached = this.versionCache.get(payload.sub);
 
       if (!cached || now - cached.ts > CACHE_TTL_MS) {
-        // Cache miss / expired — fetch current version from DB and refresh cache.
+        // Cache miss / expired — fetch current version, role AND permissions
+        // from the DB and refresh the cache. Resolving role/permissions here
+        // (rather than trusting the token) means an admin's change to a staff
+        // member's access takes effect within the cache TTL, no re-login.
         const { data: user } = await this.db.client
           .from('users')
-          .select('token_version')
+          .select('token_version, role, permissions')
           .eq('id', payload.sub)
           .maybeSingle();
 
         const currentVersion = user?.token_version ?? 0;
-        this.versionCache.set(payload.sub, { version: currentVersion, ts: now });
+        const role = user?.role ?? payload.role;
+        const permissions = Array.isArray(user?.permissions) ? user!.permissions : [];
+        this.versionCache.set(payload.sub, { version: currentVersion, role, permissions, ts: now });
 
         if (currentVersion !== (payload.tv ?? 0)) {
           throw new UnauthorizedException('Session revoked');
         }
-      } else if (cached.version !== (payload.tv ?? 0)) {
-        // Cache hit — version mismatch means this token has been revoked.
+
+        return { id: payload.sub, role, permissions };
+      }
+
+      // Cache hit — version mismatch means this token has been revoked.
+      if (cached.version !== (payload.tv ?? 0)) {
         throw new UnauthorizedException('Session revoked');
       }
+      return { id: payload.sub, role: cached.role, permissions: cached.permissions };
     }
 
-    return { id: payload.sub, role: payload.role };
+    // Legacy token without tv (no staff tokens are legacy) — trust the payload
+    // role and grant no staff permissions.
+    return { id: payload.sub, role: payload.role, permissions: [] };
   }
 
   /**

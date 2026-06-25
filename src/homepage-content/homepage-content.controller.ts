@@ -1,13 +1,15 @@
 import { Controller, Get, Patch, Body, UseGuards, Header } from '@nestjs/common';
 import { HomepageContentService } from './homepage-content.service';
 import { UpdateContentDto } from './dto/update-content.dto';
-import { AdminGuard } from '../common/guards/admin.guard';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { Permission } from '../common/decorators/permission.decorator';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('homepage-content')
 @ApiBearerAuth('access-token')
+@Permission('homepage')
 @Controller()
 export class HomepageContentController {
   constructor(private service: HomepageContentService) {}
@@ -32,7 +34,7 @@ export class HomepageContentController {
   }
 
   /** Admin-only — update a single key. */
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('homepage_content.update')
   @Patch('admin/homepage-content')
   update(@Body() dto: UpdateContentDto) {

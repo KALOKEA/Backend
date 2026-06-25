@@ -1,13 +1,15 @@
 import { Controller, Get, Patch, Body, UseGuards, Header } from '@nestjs/common';
 import { SiteContentService } from './site-content.service';
 import { UpdateSiteContentDto } from './dto/update-site-content.dto';
-import { AdminGuard } from '../common/guards/admin.guard';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { Permission } from '../common/decorators/permission.decorator';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 @ApiTags('site-content')
 @ApiBearerAuth('access-token')
+@Permission('content')
 @Controller()
 export class SiteContentController {
   constructor(private service: SiteContentService) {}
@@ -21,7 +23,7 @@ export class SiteContentController {
   }
 
   /** Admin-only — update a single key. */
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('site_content.update')
   @Patch('admin/site-content')
   update(@Body() dto: UpdateSiteContentDto) {

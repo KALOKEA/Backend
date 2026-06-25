@@ -6,13 +6,15 @@ import { ProductQueryDto } from './dto/product-query.dto';
 import { AddImageDto } from './dto/add-image.dto';
 import { UpdateImageDto } from './dto/update-image.dto';
 import { Public } from '../common/decorators/public.decorator';
-import { AdminGuard } from '../common/guards/admin.guard';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { Permission } from '../common/decorators/permission.decorator';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { OptionalJwtAuthGuard } from '../common/guards/optional-jwt-auth.guard';
 import { ApiTags } from '@nestjs/swagger';
 
 @ApiTags('products')
+@Permission('products')
 @Controller('products')
 export class ProductsController {
   constructor(private products: ProductsService) {}
@@ -26,7 +28,13 @@ export class ProductsController {
   @UseInterceptors(CacheInterceptor)
   @CacheTTL(60000)
   findAll(@Query() query: ProductQueryDto, @CurrentUser() user: any) {
-    if (user?.role !== 'admin') {
+    // Inactive products are visible only to full admins and to staff who have
+    // the 'products' permission (the admin product manager). Everyone else
+    // (storefront, other staff) only sees active products.
+    const isAdmin = user?.role === 'admin';
+    const isProductStaff =
+      user?.role === 'staff' && Array.isArray(user?.permissions) && user.permissions.includes('products');
+    if (!isAdmin && !isProductStaff) {
       query.include_inactive = false;
     }
     return this.products.findAll(query);
@@ -34,31 +42,31 @@ export class ProductsController {
 
   // --- Product images (admin). Declared before ':slug' so the literal
   //     'images' segment is never swallowed by the slug route. ---
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Get(':id/images')
   listImages(@Param('id') id: string) {
     return this.products.listImages(id);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Post(':id/images')
   addImage(@Param('id') id: string, @Body() dto: AddImageDto) {
     return this.products.addImage(id, dto);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Patch('images/:imageId/primary')
   setPrimaryImage(@Param('imageId') imageId: string) {
     return this.products.setPrimaryImage(imageId);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Patch('images/:imageId')
   updateImage(@Param('imageId') imageId: string, @Body() dto: UpdateImageDto) {
     return this.products.updateImage(imageId, dto);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @Delete('images/:imageId')
   deleteImage(@Param('imageId') imageId: string) {
     return this.products.deleteImage(imageId);
@@ -81,28 +89,28 @@ export class ProductsController {
     return this.products.findBySlug(slug);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('product.create')
   @Post()
   create(@Body() dto: CreateProductDto) {
     return this.products.create(dto);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('product.update')
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: Partial<CreateProductDto>) {
     return this.products.update(id, dto);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('product.deactivate')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.products.remove(id);
   }
 
-  @UseGuards(AdminGuard)
+  @UseGuards(PermissionsGuard)
   @AdminAction('product.hard_delete')
   @Delete(':id/permanent')
   hardDelete(@Param('id') id: string) {
