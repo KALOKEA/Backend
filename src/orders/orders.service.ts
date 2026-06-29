@@ -505,18 +505,13 @@ export class OrdersService {
       await this.coupons.redeem(appliedCoupon.id, order.id, userId, dto.guest_email);
     }
 
-    // COD is a committed sale → confirmation + receipt + invoice email and GST
-    // ledger now. Razorpay does both on payment.captured (webhook).
+    // COD is a committed sale → confirmation + receipt + invoice email.
+    // GST ledger now posts ONLY on delivery (updateStatus 'delivered') for both
+    // COD and prepaid — only a delivered product is a completed taxable sale.
     if (paymentMethod === 'cod') {
       // Post-sale side-effects on an ALREADY-COMMITTED order — never let them 500
       // the response. The order + items are persisted and stock is reserved; a
-      // failed ledger or email is logged for reconciliation, not shown to the
-      // customer. (Without this, a Brevo/ledger hiccup would fail a valid COD order.)
-      try {
-        await this.gst.postSaleLedger(order.id);
-      } catch (e: any) {
-        this.logger.error(`GST ledger failed for order ${order.order_number}: ${e?.message || e}`);
-      }
+      // failed email is logged for reconciliation, not shown to the customer.
       try {
         await this.sendConfirmationEmails(order.id);
       } catch (e: any) {
@@ -884,6 +879,13 @@ export class OrdersService {
     }
 
     if (dto.status === 'delivered') {
+      // Post GST sale ledger on delivery — this is the moment BOTH payment AND
+      // delivery are confirmed, making it a completed taxable sale.
+      try {
+        await this.gst.postSaleLedger(id);
+      } catch (e: any) {
+        this.logger.error(`GST sale ledger failed on delivery for ${order.order_number}: ${e?.message || e}`);
+      }
       if (userEmail) {
         await this.email.sendOrderDelivered(userEmail, {
           customer_name: customerName,

@@ -218,11 +218,7 @@ export class PaymentsService {
         throw new BadRequestException('Payment verified but order update failed — please contact support');
       }
 
-      // Post GST ledger entry for this sale.
-      await this.gst.postSaleLedger(order.id).catch((e) =>
-        this.logger.warn(`GST ledger fallback failed for ${order.id}: ${e.message}`),
-      );
-
+      // GST ledger now posts on delivery (orders.service.ts updateStatus 'delivered').
       // Deduct stock (same guard as webhook — if short, log for manual review).
       for (const item of (order.order_items as any[]) || []) {
         const { data: ok } = await this.db.client.rpc('decrement_stock', {
@@ -307,9 +303,8 @@ export class PaymentsService {
           throw new BadRequestException('Webhook: order update failed');
         }
 
-        // Record the sale in the GST ledger (online orders post here, not at
-        // creation — only a captured payment is a committed taxable sale).
-        await this.gst.postSaleLedger(order.id);
+        // GST ledger posts on delivery (orders.service.ts updateStatus 'delivered'),
+        // not here — only a delivered product is a completed taxable sale.
 
         // Deduct stock now that payment is captured (online orders skip the
         // decrement at order creation — see OrdersService.createOrder). Atomic
