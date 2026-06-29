@@ -198,6 +198,80 @@ export class GstService {
   }
 
   /**
+   * Reverse the GST ledger when an order is cancelled.
+   * Posts negative rows that exactly mirror the original sale rows, so the
+   * net GST for the order becomes zero.
+   * Idempotent: skips if reversal rows already exist (return_id IS NULL guard).
+   * Safe to call on unpaid/abandoned orders — exits early if no sale rows exist.
+   */
+  async postCancellationLedger(orderId: string): Promise<void> {
+    // Idempotency guard: cancellation reversals have txn_type='return',
+    // return_id=null, exchange_id=null. If any exist, we already reversed.
+    const { count } = await this.db.client
+      .from('gst_ledger')
+      .select('id', { count: 'exact', head: true })
+      .eq('order_id', orderId)
+      .eq('txn_type', 'return')
+      .is('return_id', null)
+      .is('exchange_id', null);
+    if (count && count > 0) return;
+
+    // Fetch the original sale rows — the reversal must exactly mirror these.
+    const { data: saleRows } = await this.db.client
+      .from('gst_ledger')
+      .select('*')
+      .eq('order_id', orderId)
+      .eq('txn_type', 'sale');
+    if (!saleRows || !saleRows.length) return; // GST was never posted (e.g. unpaid Razorpay order)
+
+    // Exclude items already reversed by postReturnLedger (partial return before cancel).
+    // Those rows have txn_type='return' WITH return_id set (not null). If we reversed
+    // them again here, the GST credit would be doubled for those items.
+    const { data: existingReturnRows } = await this.db.client
+      .from('gst_ledger')
+      .select('order_item_id')
+      .eq('order_id', orderId)
+      .eq('txn_type', 'return')
+      .not('return_id', 'is', null);
+    const alreadyReversedIds = new Set(
+      (existingReturnRows || []).map((r: any) => r.order_item_id).filter(Boolean),
+    );
+
+    const rowsToReverse = saleRows.filter((sr: any) => !alreadyReversedIds.has(sr.order_item_id));
+    if (!rowsToReverse.length) return; // all items already reversed by returns flow
+
+    const now = new Date().toISOString();
+    const reversals = rowsToReverse.map((sr: any) => ({
+      txn_type: 'return',
+      txn_date: now,
+      order_id: sr.order_id,
+      order_number: sr.order_number,
+      order_item_id: sr.order_item_id,
+      return_id: null,
+      exchange_id: null,
+      customer_name: sr.customer_name,
+      customer_gstin: sr.customer_gstin,
+      hsn_code: sr.hsn_code,
+      description: `Cancellation: ${sr.description || ''}`.trim(),
+      quantity: -(Number(sr.quantity) || 0),
+      gst_rate: sr.gst_rate,
+      place_of_supply: sr.place_of_supply,
+      is_intra_state: sr.is_intra_state,
+      taxable_value: -(Number(sr.taxable_value) || 0),
+      cgst: -(Number(sr.cgst) || 0),
+      sgst: -(Number(sr.sgst) || 0),
+      igst: -(Number(sr.igst) || 0),
+      total_gst: -(Number(sr.total_gst) || 0),
+      gross: -(Number(sr.gross) || 0),
+    }));
+
+    const { error } = await this.db.client.from('gst_ledger').insert(reversals);
+    if (error && error.code !== '23505') {
+      this.logger.error(`postCancellationLedger failed for order ${orderId}: ${error.message}`);
+    }
+  }
+
+  /**
    * Post the GST impact of a completed exchange: a negative line for the
    * returned (original) item and a positive line for the new item. Net effect
    * equals exchange.gst_difference. Idempotent on exchange_id.

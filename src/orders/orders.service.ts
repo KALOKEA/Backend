@@ -756,6 +756,15 @@ export class OrdersService {
       // If guardRow is null, another concurrent call already claimed the refund — skip
     }
 
+    // Reverse GST ledger for cancelled order.
+    // postCancellationLedger exits early if no sale rows exist (unpaid Razorpay),
+    // so it is safe to call unconditionally here.
+    try {
+      await this.gst.postCancellationLedger(id);
+    } catch (e: any) {
+      this.logger.warn(`GST cancellation reversal failed for ${order.order_number}: ${e?.message || e}`);
+    }
+
     // Send cancellation email
     const recipientEmail = order.guest_email || (order.users as any)?.email;
     const customerName = (order.users as any)?.name || (order.address_snapshot as any)?.name || 'Customer';
@@ -950,6 +959,15 @@ export class OrdersService {
             await this.db.client.from('orders').update({ payment_status: 'paid' }).eq('id', id);
           }
         }
+      }
+
+      // Reverse GST ledger for admin-cancelled orders.
+      // Same logic as cancelOrder() — postCancellationLedger is idempotent and
+      // exits safely if no sale rows exist (unpaid/abandoned Razorpay orders).
+      try {
+        await this.gst.postCancellationLedger(id);
+      } catch (e: any) {
+        this.logger.warn(`GST cancellation reversal failed for admin cancel ${order.order_number}: ${e?.message || e}`);
       }
 
       if (userEmail) {
