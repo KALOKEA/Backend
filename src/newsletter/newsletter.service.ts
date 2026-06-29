@@ -37,44 +37,54 @@ export class NewsletterService {
   async listSubscribers(page = 1, limit = 50, active?: string) {
     const offset = (page - 1) * limit;
 
-    // Use exactly the same query pattern as exportCsv() which is proven to work.
-    // All filtering and pagination done in JS — avoids any query-builder type/runtime
-    // issues with conditional .eq() chaining in this Supabase client version.
+    // Mirror getStats() exactly: use { count: 'exact' } option, no .order(), no .range().
+    // Bare select() + .order() (without count option) returns a Supabase error in this
+    // client version. Sort and paginate in JS instead.
     const { data: rawData, error } = await this.db.client
       .from('newsletter_subscribers')
-      .select('email, is_active, created_at')
-      .order('created_at', { ascending: false });
+      .select('id, email, is_active, created_at', { count: 'exact' });
 
     if (error) {
-      this.logger.error(`listSubscribers failed: ${error.message}`);
+      this.logger.error(`listSubscribers failed: ${JSON.stringify(error)}`);
       throw new InternalServerErrorException('Failed to load subscribers');
     }
 
+    // Sort newest first in JS
+    let all = ((rawData || []) as any[]).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+
     // JS filter for active/inactive
-    let filtered = (rawData || []) as any[];
-    if (active === 'true')  filtered = filtered.filter((s: any) =>  s.is_active);
-    if (active === 'false') filtered = filtered.filter((s: any) => !s.is_active);
+    if (active === 'true')  all = all.filter((s: any) =>  s.is_active);
+    if (active === 'false') all = all.filter((s: any) => !s.is_active);
 
-    const total = filtered.length;
-    const subs = filtered.slice(offset, offset + limit);
+    const total = all.length;
+    const subs = all.slice(offset, offset + limit);
 
-    // Enrich with name + phone from users table where email matches
+    // Enrich with name from users table — non-fatal if it fails
     const emails = subs.map((s: any) => s.email).filter(Boolean);
-    const profileByEmail: Record<string, { name?: string; phone?: string }> = {};
+    const nameByEmail: Record<string, string> = {};
     if (emails.length) {
-      const { data: users } = await this.db.client
-        .from('users')
-        .select('name, email, phone')
-        .in('email', emails);
-      for (const u of users || []) {
-        if (u.email) profileByEmail[String(u.email).toLowerCase()] = { name: u.name, phone: u.phone };
+      try {
+        const { data: users, error: usersErr } = await this.db.client
+          .from('users')
+          .select('name, email')
+          .in('email', emails);
+        if (usersErr) {
+          this.logger.warn(`users enrichment failed: ${usersErr.message}`);
+        }
+        for (const u of users || []) {
+          if (u.email) nameByEmail[String(u.email).toLowerCase()] = u.name || '';
+        }
+      } catch (e: any) {
+        this.logger.warn(`users enrichment threw: ${e?.message}`);
       }
     }
 
-    const enriched = subs.map((s: any) => {
-      const p = profileByEmail[String(s.email || '').toLowerCase()] || {};
-      return { ...s, name: p.name || null, phone: p.phone || null };
-    });
+    const enriched = subs.map((s: any) => ({
+      ...s,
+      name: nameByEmail[String(s.email || '').toLowerCase()] || null,
+    }));
 
     return {
       data: enriched,
@@ -171,12 +181,14 @@ export class NewsletterService {
   }
 
   async exportCsv(): Promise<string> {
+    // Use { count: 'exact' } to match the known-working query pattern (no bare select+order)
     const { data } = await this.db.client
       .from('newsletter_subscribers')
-      .select('email, is_active, created_at')
-      .order('created_at', { ascending: false });
+      .select('email, is_active, created_at', { count: 'exact' });
 
-    const rows = data || [];
+    const rows = ((data || []) as any[]).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
 
     // Enrich with registered user name where available
     const emails = rows.map((r: any) => r.email).filter(Boolean);
