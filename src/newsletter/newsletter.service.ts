@@ -43,10 +43,9 @@ export class NewsletterService {
     // avoids that entirely.
     let dataQ = this.db.client
       .from('newsletter_subscribers')
-      .select('id, email, is_active, created_at')
+      .select('id, email, is_active, created_at')   // no count:exact on data query
       .order('created_at', { ascending: false })
-      .limit(limit)
-      .offset(offset);
+      .range(offset, offset + limit - 1);            // range without count keeps data intact
 
     let countQ = this.db.client
       .from('newsletter_subscribers')
