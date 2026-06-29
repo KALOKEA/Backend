@@ -404,11 +404,15 @@ export class GstService {
       (ordersData || [])
         .filter((o: any) => {
           if (o.payment_method !== 'cod') {
-            // Prepaid: visible as soon as payment is captured (or refunded)
+            // Prepaid: visible as soon as payment is captured (or later refunded)
             return o.payment_status === 'paid' || o.payment_status === 'refunded';
           }
-          // COD: visible only after delivery (or refund after delivery)
-          return o.status === 'delivered' || o.status === 'refunded';
+          // COD: visible after delivery, refund, or cancellation-after-delivery.
+          // 'cancelled' is included so that if a COD order was delivered (GST posted)
+          // and then cancelled, both the sale row AND the cancellation reversal row
+          // are visible — they net to zero. Cancelled-before-delivery orders have no
+          // sale rows so this is a no-op for them.
+          return o.status === 'delivered' || o.status === 'refunded' || o.status === 'cancelled';
         })
         .map((o: any) => o.id),
     );
