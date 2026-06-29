@@ -37,29 +37,28 @@ export class NewsletterService {
   async listSubscribers(page = 1, limit = 50, active?: string) {
     const offset = (page - 1) * limit;
 
-    // Fetch all matching rows (no .range() — that method throws in this Supabase
-    // client version). Subscriber lists stay small so in-memory slice is fine.
-    let q = this.db.client
+    // Use exactly the same query pattern as exportCsv() which is proven to work.
+    // All filtering and pagination done in JS — avoids any query-builder type/runtime
+    // issues with conditional .eq() chaining in this Supabase client version.
+    const { data: rawData, error } = await this.db.client
       .from('newsletter_subscribers')
-      .select('id, email, is_active, created_at')
+      .select('email, is_active, created_at')
       .order('created_at', { ascending: false });
-
-    if (active === 'true') q = q.eq('is_active', true);
-    if (active === 'false') q = q.eq('is_active', false);
-
-    const { data, error } = await q;
 
     if (error) {
       this.logger.error(`listSubscribers failed: ${error.message}`);
       throw new InternalServerErrorException('Failed to load subscribers');
     }
-    const all = data || [];
-    // In-memory slice for pagination
-    const subs = all.slice(offset, offset + limit);
-    const count = all.length;
 
-    // Enrich each subscriber with the customer's name + phone IF their email
-    // matches a registered user (newsletter signup itself only collects email).
+    // JS filter for active/inactive
+    let filtered = (rawData || []) as any[];
+    if (active === 'true')  filtered = filtered.filter((s: any) =>  s.is_active);
+    if (active === 'false') filtered = filtered.filter((s: any) => !s.is_active);
+
+    const total = filtered.length;
+    const subs = filtered.slice(offset, offset + limit);
+
+    // Enrich with name + phone from users table where email matches
     const emails = subs.map((s: any) => s.email).filter(Boolean);
     const profileByEmail: Record<string, { name?: string; phone?: string }> = {};
     if (emails.length) {
@@ -71,6 +70,7 @@ export class NewsletterService {
         if (u.email) profileByEmail[String(u.email).toLowerCase()] = { name: u.name, phone: u.phone };
       }
     }
+
     const enriched = subs.map((s: any) => {
       const p = profileByEmail[String(s.email || '').toLowerCase()] || {};
       return { ...s, name: p.name || null, phone: p.phone || null };
@@ -78,7 +78,7 @@ export class NewsletterService {
 
     return {
       data: enriched,
-      meta: { total: count ?? 0, page, limit, total_pages: Math.ceil((count ?? 0) / limit) },
+      meta: { total, page, limit, total_pages: Math.ceil(total / limit) },
     };
   }
 
