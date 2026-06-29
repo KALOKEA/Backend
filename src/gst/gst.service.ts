@@ -89,13 +89,16 @@ export class GstService {
     const intra = order.is_intra_state ?? this.isIntraState(addr.state, null);
     const customerName = order.company_name || addr.name || 'Customer';
 
+    // Delivery time = now (this method is called when admin marks order 'delivered').
+    const deliveredAt = new Date().toISOString();
+
     const rows = (order.order_items || []).map((it: any) => {
       const taxable = Number(it.taxable_value) || 0;
       const gst = Number(it.gst_amount) || 0;
       const { cgst, sgst, igst } = this.splitTax(gst, intra);
       return {
         txn_type: 'sale',
-        txn_date: order.created_at,
+        txn_date: deliveredAt,
         order_id: order.id,
         order_item_id: it.id,
         order_number: order.order_number,
@@ -356,7 +359,16 @@ export class GstService {
 
   // ── Dashboard / export ───────────────────────────────────────────────────
 
-  /** Raw ledger rows for a date range (and optional type), newest first. */
+  /**
+   * Raw ledger rows for a date range (and optional type), newest first.
+   *
+   * DELIVERY GATE: sale rows are only returned for orders that have actually
+   * been delivered (status not in the pre-delivery / cancelled set). This means
+   * both old rows (posted at payment time before the delivery-gate code change)
+   * and new rows (posted correctly on delivery) are filtered consistently.
+   * Return and exchange rows always pass through — they can only exist after an
+   * order was delivered.
+   */
   async getLedger(opts: { from?: string; to?: string; type?: string }) {
     let q = this.db.client
       .from('gst_ledger')
@@ -369,7 +381,30 @@ export class GstService {
     }
     const { data, error } = await q;
     if (error) throw error;
-    return data || [];
+    const rows = data || [];
+
+    // Return / exchange rows are always valid — skip the delivery check for them.
+    const saleRows = rows.filter((r: any) => r.txn_type === 'sale');
+    if (!saleRows.length) return rows;
+
+    // Find which of those sale orders are in a delivered-family status.
+    const saleOrderIds = [...new Set(saleRows.map((r: any) => r.order_id).filter(Boolean))] as string[];
+    const { data: ordersData } = await this.db.client
+      .from('orders')
+      .select('id, status')
+      .in('id', saleOrderIds);
+
+    // Pre-delivery orders are NOT yet taxable sales.
+    // 'cancelled' is intentionally excluded from this set: a cancelled order that
+    // went through the old payment-time ledger posting will have both a sale row
+    // AND a cancellation-reversal row — both must be visible so they net to zero.
+    // If only the reversal shows (sale excluded), the panel shows a false negative.
+    const PRE_DELIVERY = new Set(['pending', 'confirmed', 'processing', 'shipped']);
+    const deliveredOrderIds = new Set(
+      (ordersData || []).filter((o: any) => !PRE_DELIVERY.has(o.status)).map((o: any) => o.id),
+    );
+
+    return rows.filter((r: any) => r.txn_type !== 'sale' || deliveredOrderIds.has(r.order_id));
   }
 
   /**
@@ -479,16 +514,28 @@ export class GstService {
     const toDate = new Date(year, mon, 1); // first day of NEXT month (UTC)
     const to   = new Date(`${toDate.getFullYear()}-${String(toDate.getMonth() + 1).padStart(2, '0')}-01T00:00:00+05:30`).toISOString();
 
-    // Fetch only 'sale' type rows (net — returns are separate GSTR-1 amendment)
+    // Fetch only 'sale' type rows (net — returns are separate GSTR-1 amendment).
+    // Also need order_id to apply the delivery gate (same rule as getLedger).
     let q = this.db.client
       .from('gst_ledger')
-      .select('hsn_code, description, gst_rate, taxable_value, cgst, sgst, igst, quantity')
+      .select('order_id, hsn_code, description, gst_rate, taxable_value, cgst, sgst, igst, quantity')
       .eq('txn_type', 'sale')
       .gte('txn_date', from)
       .lt('txn_date', to);
     const { data, error } = await q;
     if (error) throw error;
-    const rows = data || [];
+    const rawRows = data || [];
+
+    // Delivery gate: only count sale rows for delivered-family orders.
+    const rawOrderIds = [...new Set(rawRows.map((r: any) => r.order_id).filter(Boolean))] as string[];
+    let deliveredGstr1Ids = new Set<string>();
+    if (rawOrderIds.length) {
+      const { data: ordData } = await this.db.client
+        .from('orders').select('id, status').in('id', rawOrderIds);
+      const PRE = new Set(['pending', 'confirmed', 'processing', 'shipped', 'cancelled']);
+      deliveredGstr1Ids = new Set((ordData || []).filter((o: any) => !PRE.has(o.status)).map((o: any) => o.id));
+    }
+    const rows = rawRows.filter((r: any) => deliveredGstr1Ids.has(r.order_id));
 
     // Aggregate by HSN + GST rate
     const map = new Map<string, {

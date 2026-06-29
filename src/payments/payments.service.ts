@@ -1,7 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException, Logger, RawBodyRequest } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
-import { GstService } from '../gst/gst.service';
 import { OrdersService } from '../orders/orders.service';
 import { EmailService } from '../email/email.service';
 import { RefundDto } from './dto/refund.dto';
@@ -15,7 +14,6 @@ export class PaymentsService {
   constructor(
     private db: DatabaseService,
     private config: ConfigService,
-    private gst: GstService,
     private orders: OrdersService,
     private email: EmailService,
   ) {}
