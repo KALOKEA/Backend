@@ -162,7 +162,7 @@ export class OrdersService {
       return {
         variant_id: l.variant.id,
         snapshot_name: l.product.name,
-        snapshot_sku: l.variant.sku,
+        snapshot_sku: l.variant.sku ?? `VAR-${l.variant.id.slice(0, 8).toUpperCase()}`,
         snapshot_size: l.variant.size,
         snapshot_colour: l.variant.colour,
         snapshot_price: l.variant.price,
