@@ -506,8 +506,8 @@ export class OrdersService {
     }
 
     // COD is a committed sale → confirmation + receipt + invoice email.
-    // GST ledger now posts ONLY on delivery (updateStatus 'delivered') for both
-    // COD and prepaid — only a delivered product is a completed taxable sale.
+    // COD GST posts on delivery (updateStatus 'delivered' below).
+    // Prepaid GST posts at payment capture (PaymentsService).
     if (paymentMethod === 'cod') {
       // Post-sale side-effects on an ALREADY-COMMITTED order — never let them 500
       // the response. The order + items are persisted and stock is reserved; a
@@ -879,8 +879,8 @@ export class OrdersService {
     }
 
     if (dto.status === 'delivered') {
-      // Post GST sale ledger on delivery — this is the moment BOTH payment AND
-      // delivery are confirmed, making it a completed taxable sale.
+      // COD: post GST sale ledger on delivery (first taxable moment for COD).
+      // Prepaid: already posted at payment — idempotency guard makes this a no-op.
       try {
         await this.gst.postSaleLedger(id);
       } catch (e: any) {

@@ -69,6 +69,10 @@ export class GstService {
    * Post one 'sale' ledger row per order line. Idempotent: if a sale row for
    * this order already exists (duplicate webhook, retry) it is skipped.
    * Reads the GST snapshot already persisted on the order + order_items.
+   *
+   * Called from two places:
+   *   • PaymentsService (Razorpay verifyPayment + webhook) — at payment capture for prepaid.
+   *   • OrdersService.updateStatus('delivered') — at delivery for COD; no-op (idempotent) for prepaid.
    */
   async postSaleLedger(orderId: string): Promise<void> {
     const { data: order } = await this.db.client
@@ -83,14 +87,14 @@ export class GstService {
       .select('id', { count: 'exact', head: true })
       .eq('order_id', orderId)
       .eq('txn_type', 'sale');
-    if (count && count > 0) return; // already posted
+    if (count && count > 0) return; // already posted — idempotency guard
 
     const addr = order.address_snapshot || {};
     const intra = order.is_intra_state ?? this.isIntraState(addr.state, null);
     const customerName = order.company_name || addr.name || 'Customer';
 
-    // Delivery time = now (this method is called when admin marks order 'delivered').
-    const deliveredAt = new Date().toISOString();
+    // txn_date = now: payment capture time for prepaid, delivery time for COD.
+    const txnDate = new Date().toISOString();
 
     const rows = (order.order_items || []).map((it: any) => {
       const taxable = Number(it.taxable_value) || 0;
@@ -98,7 +102,7 @@ export class GstService {
       const { cgst, sgst, igst } = this.splitTax(gst, intra);
       return {
         txn_type: 'sale',
-        txn_date: deliveredAt,
+        txn_date: txnDate,
         order_id: order.id,
         order_item_id: it.id,
         order_number: order.order_number,
@@ -362,12 +366,15 @@ export class GstService {
   /**
    * Raw ledger rows for a date range (and optional type), newest first.
    *
-   * DELIVERY GATE: sale rows are only returned for orders that have actually
-   * been delivered (status not in the pre-delivery / cancelled set). This means
-   * both old rows (posted at payment time before the delivery-gate code change)
-   * and new rows (posted correctly on delivery) are filtered consistently.
-   * Return and exchange rows always pass through — they can only exist after an
-   * order was delivered.
+   * VISIBILITY GATE (split by payment method):
+   *   • Prepaid (Razorpay) orders — sale rows count from the moment payment is
+   *     captured (payment_status IN ('paid','refunded')). Refunded is included so
+   *     old sale rows + their reversal rows both appear and net to zero.
+   *   • COD orders — sale rows count only once the order is delivered
+   *     (status IN ('delivered','refunded')). Refunded included for same reason.
+   *
+   * Return and exchange rows always pass through — they can only exist after a
+   * sale has already been posted.
    */
   async getLedger(opts: { from?: string; to?: string; type?: string }) {
     let q = this.db.client
@@ -383,28 +390,30 @@ export class GstService {
     if (error) throw error;
     const rows = data || [];
 
-    // Return / exchange rows are always valid — skip the delivery check for them.
+    // Return / exchange rows are always valid — skip the visibility check for them.
     const saleRows = rows.filter((r: any) => r.txn_type === 'sale');
     if (!saleRows.length) return rows;
 
-    // Find which of those sale orders are in a delivered-family status.
     const saleOrderIds = [...new Set(saleRows.map((r: any) => r.order_id).filter(Boolean))] as string[];
     const { data: ordersData } = await this.db.client
       .from('orders')
-      .select('id, status')
+      .select('id, status, payment_method, payment_status')
       .in('id', saleOrderIds);
 
-    // Pre-delivery orders are NOT yet taxable sales.
-    // 'cancelled' is intentionally excluded from this set: a cancelled order that
-    // went through the old payment-time ledger posting will have both a sale row
-    // AND a cancellation-reversal row — both must be visible so they net to zero.
-    // If only the reversal shows (sale excluded), the panel shows a false negative.
-    const PRE_DELIVERY = new Set(['pending', 'confirmed', 'processing', 'shipped']);
-    const deliveredOrderIds = new Set(
-      (ordersData || []).filter((o: any) => !PRE_DELIVERY.has(o.status)).map((o: any) => o.id),
+    const visibleOrderIds = new Set(
+      (ordersData || [])
+        .filter((o: any) => {
+          if (o.payment_method !== 'cod') {
+            // Prepaid: visible as soon as payment is captured (or refunded)
+            return o.payment_status === 'paid' || o.payment_status === 'refunded';
+          }
+          // COD: visible only after delivery (or refund after delivery)
+          return o.status === 'delivered' || o.status === 'refunded';
+        })
+        .map((o: any) => o.id),
     );
 
-    return rows.filter((r: any) => r.txn_type !== 'sale' || deliveredOrderIds.has(r.order_id));
+    return rows.filter((r: any) => r.txn_type !== 'sale' || visibleOrderIds.has(r.order_id));
   }
 
   /**
@@ -526,14 +535,26 @@ export class GstService {
     if (error) throw error;
     const rawRows = data || [];
 
-    // Delivery gate: only count sale rows for delivered-family orders.
+    // Visibility gate (same split rule as getLedger):
+    //   Prepaid: count at payment (payment_status in 'paid'/'refunded')
+    //   COD: count at delivery (status in 'delivered'/'refunded')
+    // 'cancelled' orders are excluded from GSTR-1 — cancelled outward supplies
+    // are reported as amendments, not as initial outward supplies.
     const rawOrderIds = [...new Set(rawRows.map((r: any) => r.order_id).filter(Boolean))] as string[];
     let deliveredGstr1Ids = new Set<string>();
     if (rawOrderIds.length) {
       const { data: ordData } = await this.db.client
-        .from('orders').select('id, status').in('id', rawOrderIds);
-      const PRE = new Set(['pending', 'confirmed', 'processing', 'shipped', 'cancelled']);
-      deliveredGstr1Ids = new Set((ordData || []).filter((o: any) => !PRE.has(o.status)).map((o: any) => o.id));
+        .from('orders').select('id, status, payment_method, payment_status').in('id', rawOrderIds);
+      deliveredGstr1Ids = new Set(
+        (ordData || [])
+          .filter((o: any) => {
+            if (o.payment_method !== 'cod') {
+              return o.payment_status === 'paid'; // prepaid: no refunded — cancelled sales excluded from GSTR-1
+            }
+            return o.status === 'delivered'; // COD: only delivered
+          })
+          .map((o: any) => o.id),
+      );
     }
     const rows = rawRows.filter((r: any) => deliveredGstr1Ids.has(r.order_id));
 

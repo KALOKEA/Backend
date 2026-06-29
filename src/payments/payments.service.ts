@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { DatabaseService } from '../database/database.service';
 import { OrdersService } from '../orders/orders.service';
 import { EmailService } from '../email/email.service';
+import { GstService } from '../gst/gst.service';
 import { RefundDto } from './dto/refund.dto';
 import * as crypto from 'crypto';
 import { Request } from 'express';
@@ -16,6 +17,7 @@ export class PaymentsService {
     private config: ConfigService,
     private orders: OrdersService,
     private email: EmailService,
+    private gst: GstService,
   ) {}
 
   /**
@@ -216,7 +218,12 @@ export class PaymentsService {
         throw new BadRequestException('Payment verified but order update failed — please contact support');
       }
 
-      // GST ledger now posts on delivery (orders.service.ts updateStatus 'delivered').
+      // Prepaid GST: post sale ledger at payment capture (not delivery).
+      // COD GST is posted on delivery in orders.service.ts. Idempotent — safe on retry.
+      await this.gst.postSaleLedger(order.id).catch((e: any) =>
+        this.logger.warn(`GST sale ledger (verifyPayment) failed for ${order.order_number}: ${e?.message}`),
+      );
+
       // Deduct stock (same guard as webhook — if short, log for manual review).
       for (const item of (order.order_items as any[]) || []) {
         const { data: ok } = await this.db.client.rpc('decrement_stock', {
@@ -301,8 +308,11 @@ export class PaymentsService {
           throw new BadRequestException('Webhook: order update failed');
         }
 
-        // GST ledger posts on delivery (orders.service.ts updateStatus 'delivered'),
-        // not here — only a delivered product is a completed taxable sale.
+        // Prepaid GST: post sale ledger at payment capture (not delivery).
+        // COD GST is posted on delivery in orders.service.ts. Idempotent — safe on retry.
+        await this.gst.postSaleLedger(order.id).catch((e: any) =>
+          this.logger.warn(`GST sale ledger (webhook) failed for ${order.order_number}: ${e?.message}`),
+        );
 
         // Deduct stock now that payment is captured (online orders skip the
         // decrement at order creation — see OrdersService.createOrder). Atomic
