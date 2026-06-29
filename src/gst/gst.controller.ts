@@ -33,7 +33,7 @@ export class GstController {
     return this.gst.getCashflowSummary({ from, to });
   }
 
-  /** Per-transaction CSV (opens in Excel) — full ledger for the CA. */
+  /** Per-transaction CSV (opens in Excel) — GSTR-1 detail format for the CA. */
   @Get('export/transactions')
   async exportTransactions(
     @Res() res: Response,
@@ -42,7 +42,7 @@ export class GstController {
     @Query('type') type?: string,
   ) {
     const csv = await this.gst.exportLedgerCsv({ from, to, type });
-    this.sendCsv(res, `gst-transactions${this.suffix(from, to)}.csv`, csv);
+    this.sendCsv(res, `KALOKEA-GST${this.suffix(from, to)}.csv`, csv);
   }
 
   /** Rate-wise summary CSV (GSTR-1 style) for filing. */

@@ -463,33 +463,53 @@ export class GstService {
     };
   }
 
-  /** Per-transaction CSV (one row per ledger line) for the CA. */
+  /**
+   * Per-transaction CSV in the exact admin-specified format.
+   * Columns (all exact headers requested):
+   *   sup_name | gstin | sub_order_num | order_date | hsn_code | quantity |
+   *   gst_rate | total_taxable_sale_value | tax_amount | total_invoice_value |
+   *   taxable_shipping | end_customer_state_new | enrollment_no |
+   *   cancel_return_date | financial_year | month_number
+   */
   async exportLedgerCsv(opts: { from?: string; to?: string; type?: string }): Promise<string> {
-    const rows = await this.getLedger(opts);
-    const header = [
-      'Date', 'Type', 'Invoice No', 'Customer', 'GSTIN', 'HSN', 'Description',
-      'Qty', 'Place of Supply', 'Intra-State', 'GST Rate %',
-      'Taxable Value', 'CGST', 'SGST', 'IGST', 'Total GST', 'Gross',
-    ];
-    const lines = rows.map((r: any) => [
-      this.csvDate(r.txn_date),
-      r.txn_type,
-      r.order_number || '',
-      r.customer_name || '',
-      r.customer_gstin || '',
-      r.hsn_code || '',
-      r.description || '',
-      r.quantity,
-      r.place_of_supply || '',
-      r.is_intra_state ? 'Yes' : 'No',
-      Number(r.gst_rate) || 0,
-      this.rupees(r.taxable_value),
-      this.rupees(r.cgst),
-      this.rupees(r.sgst),
-      this.rupees(r.igst),
-      this.rupees(r.total_gst),
-      this.rupees(r.gross),
+    const [rows, settings] = await Promise.all([
+      this.getLedger(opts),
+      this.settings.get(),
     ]);
+
+    const supName = settings.seller_name || 'KALOKEA';
+
+    const header = [
+      'sup_name', 'gstin', 'sub_order_num', 'order_date',
+      'hsn_code', 'quantity', 'gst_rate',
+      'total_taxable_sale_value', 'tax_amount', 'total_invoice_value',
+      'taxable_shipping', 'end_customer_state_new',
+      'enrollment_no', 'cancel_return_date',
+      'financial_year', 'month_number',
+    ];
+
+    const lines = rows.map((r: any) => {
+      const isReturn = r.txn_type === 'return';
+      return [
+        supName,
+        r.customer_gstin || '',                        // buyer GSTIN (B2B) or blank (B2C)
+        r.order_number || '',                           // invoice / order number
+        this.csvDate(r.txn_date),                       // transaction date (DD/MM/YYYY)
+        r.hsn_code || '',
+        Math.abs(Number(r.quantity) || 0),              // qty — always positive in report
+        Number(r.gst_rate) || 0,
+        this.rupees(r.taxable_value),                   // taxable sale value (₹)
+        this.rupees(r.total_gst),                       // total GST (₹)
+        this.rupees(r.gross),                           // total invoice value incl. tax (₹)
+        '0.00',                                         // taxable_shipping — tracked separately
+        r.place_of_supply || '',                        // buyer state
+        '',                                             // enrollment_no — composition scheme N/A
+        isReturn ? this.csvDate(r.txn_date) : '',       // cancel/return date (blank for sales)
+        this.indianFY(r.txn_date),                      // e.g. "2025-26"
+        this.monthNum(r.txn_date),                      // 1-12
+      ];
+    });
+
     return this.toCsv([header, ...lines]);
   }
 
@@ -704,6 +724,19 @@ export class GstService {
     const x = new Date(`${d}T00:00:00+05:30`);
     x.setUTCDate(x.getUTCDate() + 1); // adds exactly 86 400 000 ms
     return x.toISOString();
+  }
+  /** Indian financial year string for a transaction date. April starts the FY.
+   *  e.g. Jan 2026 → "2025-26", Apr 2025 → "2025-26" */
+  private indianFY(date: string): string {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = d.getMonth() + 1; // 1-12
+    const fyStart = month >= 4 ? year : year - 1;
+    return `${fyStart}-${String(fyStart + 1).slice(-2)}`;
+  }
+  /** Month number (1-12) from an ISO date string. */
+  private monthNum(date: string): number {
+    return new Date(date).getMonth() + 1;
   }
   private toCsv(rows: (string | number)[][]): string {
     const esc = (v: string | number) => {
