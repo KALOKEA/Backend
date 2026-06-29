@@ -37,20 +37,26 @@ export class NewsletterService {
   async listSubscribers(page = 1, limit = 50, active?: string) {
     const offset = (page - 1) * limit;
 
-    // NOTE: Use .limit().offset() not .range() — avoids a known Supabase PostgREST
-    // edge where range() returns empty data array when combined with count:exact on
-    // some Supabase versions. Explicit column list avoids wildcard expansion issues.
-    let q = this.db.client
+    // Split into two queries: one for data, one for count.
+    // Combining count:exact with limit/offset in a single Supabase query can cause
+    // PostgREST to return empty data array even when rows exist — separate queries
+    // avoids that entirely.
+    let dataQ = this.db.client
       .from('newsletter_subscribers')
-      .select('id, email, is_active, created_at', { count: 'exact' })
+      .select('id, email, is_active, created_at')
       .order('created_at', { ascending: false })
       .limit(limit)
       .offset(offset);
 
-    if (active === 'true') q = q.eq('is_active', true);
-    if (active === 'false') q = q.eq('is_active', false);
+    let countQ = this.db.client
+      .from('newsletter_subscribers')
+      .select('id', { count: 'exact', head: true });
 
-    const { data, count, error } = await q;
+    if (active === 'true') { dataQ = dataQ.eq('is_active', true); countQ = countQ.eq('is_active', true); }
+    if (active === 'false') { dataQ = dataQ.eq('is_active', false); countQ = countQ.eq('is_active', false); }
+
+    const [{ data, error }, { count }] = await Promise.all([dataQ, countQ]);
+
     if (error) {
       this.logger.error(`listSubscribers failed: ${error.message}`);
       throw new InternalServerErrorException('Failed to load subscribers');
