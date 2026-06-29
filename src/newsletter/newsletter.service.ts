@@ -37,30 +37,26 @@ export class NewsletterService {
   async listSubscribers(page = 1, limit = 50, active?: string) {
     const offset = (page - 1) * limit;
 
-    // Split into two queries: one for data, one for count.
-    // Combining count:exact with limit/offset in a single Supabase query can cause
-    // PostgREST to return empty data array even when rows exist — separate queries
-    // avoids that entirely.
-    let dataQ = this.db.client
+    // Fetch all matching rows (no .range() — that method throws in this Supabase
+    // client version). Subscriber lists stay small so in-memory slice is fine.
+    let q = this.db.client
       .from('newsletter_subscribers')
-      .select('id, email, is_active, created_at')   // no count:exact on data query
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);            // range without count keeps data intact
+      .select('id, email, is_active, created_at')
+      .order('created_at', { ascending: false });
 
-    let countQ = this.db.client
-      .from('newsletter_subscribers')
-      .select('id', { count: 'exact', head: true });
+    if (active === 'true') q = q.eq('is_active', true);
+    if (active === 'false') q = q.eq('is_active', false);
 
-    if (active === 'true') { dataQ = dataQ.eq('is_active', true); countQ = countQ.eq('is_active', true); }
-    if (active === 'false') { dataQ = dataQ.eq('is_active', false); countQ = countQ.eq('is_active', false); }
-
-    const [{ data, error }, { count }] = await Promise.all([dataQ, countQ]);
+    const { data, error } = await q;
 
     if (error) {
       this.logger.error(`listSubscribers failed: ${error.message}`);
       throw new InternalServerErrorException('Failed to load subscribers');
     }
-    const subs = data || [];
+    const all = data || [];
+    // In-memory slice for pagination
+    const subs = all.slice(offset, offset + limit);
+    const count = all.length;
 
     // Enrich each subscriber with the customer's name + phone IF their email
     // matches a registered user (newsletter signup itself only collects email).
