@@ -35,30 +35,41 @@ export class NewsletterService {
   }
 
   async listSubscribers(page = 1, limit = 50, active?: string) {
-    const offset = (page - 1) * limit;
+    // Use raw fetch instead of the Supabase JS client to bypass any client-level
+    // runtime issues that cause this specific multi-column SELECT to fail.
+    const supabaseUrl = process.env['SUPABASE_URL'];
+    const supabaseKey = process.env['SUPABASE_SERVICE_KEY'];
 
-    // Mirror getStats() exactly: use { count: 'exact' } option, no .order(), no .range().
-    // Bare select() + .order() (without count option) returns a Supabase error in this
-    // client version. Sort and paginate in JS instead.
-    const { data: rawData, error } = await this.db.client
-      .from('newsletter_subscribers')
-      .select('id, email, is_active, created_at', { count: 'exact' });
-
-    if (error) {
-      this.logger.error(`listSubscribers failed: ${JSON.stringify(error)}`);
+    let rawData: any[] = [];
+    try {
+      const res = await fetch(
+        `${supabaseUrl}/rest/v1/newsletter_subscribers?select=id,email,is_active,created_at&order=created_at.desc`,
+        {
+          headers: {
+            apikey: supabaseKey!,
+            Authorization: `Bearer ${supabaseKey}`,
+          },
+        },
+      );
+      if (!res.ok) {
+        const body = await res.text();
+        this.logger.error(`listSubscribers HTTP ${res.status}: ${body}`);
+        throw new InternalServerErrorException('Failed to load subscribers');
+      }
+      rawData = await res.json();
+    } catch (e: any) {
+      if (e instanceof InternalServerErrorException) throw e;
+      this.logger.error(`listSubscribers fetch error: ${e?.message}`);
       throw new InternalServerErrorException('Failed to load subscribers');
     }
 
-    // Sort newest first in JS
-    let all = ((rawData || []) as any[]).sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-    );
-
     // JS filter for active/inactive
+    let all = rawData as any[];
     if (active === 'true')  all = all.filter((s: any) =>  s.is_active);
     if (active === 'false') all = all.filter((s: any) => !s.is_active);
 
     const total = all.length;
+    const offset = (page - 1) * limit;
     const subs = all.slice(offset, offset + limit);
 
     // Enrich with name from users table — non-fatal if it fails
@@ -66,18 +77,15 @@ export class NewsletterService {
     const nameByEmail: Record<string, string> = {};
     if (emails.length) {
       try {
-        const { data: users, error: usersErr } = await this.db.client
+        const { data: users } = await this.db.client
           .from('users')
-          .select('name, email')
+          .select('name,email')
           .in('email', emails);
-        if (usersErr) {
-          this.logger.warn(`users enrichment failed: ${usersErr.message}`);
-        }
         for (const u of users || []) {
           if (u.email) nameByEmail[String(u.email).toLowerCase()] = u.name || '';
         }
       } catch (e: any) {
-        this.logger.warn(`users enrichment threw: ${e?.message}`);
+        this.logger.warn(`name enrichment: ${e?.message}`);
       }
     }
 
