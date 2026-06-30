@@ -32,6 +32,7 @@ export class ShiprocketService {
     if (!email || !password) {
       throw new InternalServerErrorException('ShipRocket credentials not configured (SHIPROCKET_EMAIL / SHIPROCKET_PASSWORD)');
     }
+    this.logger.log(`SR auth → email: "${email}" | pwd_len: ${password?.length} | pwd_first: "${password?.[0]}" | pwd_last: "${password?.[password.length-1]}"`);
     const res = await fetch(`${SR_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -39,7 +40,7 @@ export class ShiprocketService {
     });
     if (!res.ok) {
       const body = await res.text();
-      this.logger.error(`ShipRocket auth failed: ${body}`);
+      this.logger.error(`SR auth HTTP ${res.status}: ${body}`);
       throw new InternalServerErrorException('ShipRocket authentication failed');
     }
     const data = await res.json();
