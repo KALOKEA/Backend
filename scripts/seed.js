@@ -158,7 +158,7 @@ async function seedSettings() {
   const defaults = {
     seller_name: 'Kalokea Fashion Pvt Ltd',
     seller_address: '123 Fashion Street, Mumbai, Maharashtra 400001',
-    seller_gstin: '',
+    seller_gstin: '24HRYPK5081F1Z8',
     seller_state: 'Maharashtra',
     gst_rate: 5,
     admin_email: 'support@kalokea.com',
