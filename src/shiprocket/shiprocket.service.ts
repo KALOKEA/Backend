@@ -64,7 +64,7 @@ export class ShiprocketService {
     const body = await res.json().catch(() => ({}));
     if (!res.ok) {
       const msg = body?.message || body?.error || JSON.stringify(body);
-      this.logger.error(`SR ${init.method || 'GET'} ${path} → ${res.status}: ${msg}`);
+      this.logger.error(`SR ${init.method || 'GET'} ${path} → ${res.status}: ${msg} | full: ${JSON.stringify(body)}`);
       throw new BadRequestException(`ShipRocket: ${msg}`);
     }
     return body;
@@ -110,6 +110,18 @@ export class ShiprocketService {
     const pickupLocation = this.config.get<string>('SHIPROCKET_PICKUP_LOCATION') || 'Primary';
     const orderDate = new Date(order.created_at).toISOString().replace('T', ' ').slice(0, 19);
 
+    // Shiprocket requires exactly 10-digit phone (no country code)
+    const sanitizePhone = (phone: string | undefined): string => {
+      if (!phone) return '9999999999';
+      const digits = phone.replace(/\D/g, '');
+      // Remove leading 91 country code if 12 digits
+      if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
+      // Remove leading 0 if 11 digits
+      if (digits.length === 11 && digits.startsWith('0')) return digits.slice(1);
+      // Take last 10 digits as fallback
+      return digits.slice(-10) || '9999999999';
+    };
+
     const payload = {
       order_id:                   order.order_number,
       order_date:                 orderDate,
@@ -119,11 +131,11 @@ export class ShiprocketService {
       billing_address:            addr.line1 || 'Address',
       billing_address_2:          addr.line2 || '',
       billing_city:               addr.city  || 'City',
-      billing_pincode:            addr.pincode || '000000',
+      billing_pincode:            String(addr.pincode || '000000'),
       billing_state:              addr.state || 'State',
       billing_country:            'India',
       billing_email:              order.users?.email || order.guest_email || '',
-      billing_phone:              addr.phone || '9999999999',
+      billing_phone:              sanitizePhone(addr.phone),
       shipping_is_billing:        true,
       order_items:                srItems,
       payment_method:             order.payment_method === 'cod' ? 'COD' : 'Prepaid',
