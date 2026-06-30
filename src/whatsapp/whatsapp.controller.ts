@@ -5,6 +5,7 @@ import { Response } from 'express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { AdminAction } from '../common/decorators/admin-action.decorator';
+import { Public } from '../common/decorators/public.decorator';
 import { WhatsAppService } from './whatsapp.service';
 import { DatabaseService } from '../database/database.service';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
@@ -34,6 +35,7 @@ export class WhatsAppController {
    * Meta calls this once during webhook setup to verify our endpoint.
    * Responds with hub.challenge if the verify token matches.
    */
+  @Public()
   @Get('webhook')
   verifyWebhook(
     @Query() query: Record<string, any>,
@@ -65,6 +67,7 @@ export class WhatsAppController {
    * Receives delivery status updates and incoming customer messages from Meta.
    * Always respond 200 immediately so Meta doesn't retry.
    */
+  @Public()
   @Post('webhook')
   receiveWebhook(@Body() payload: any, @Res() res: Response) {
     // Acknowledge immediately — never block Meta's delivery
