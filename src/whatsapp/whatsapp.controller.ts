@@ -36,20 +36,27 @@ export class WhatsAppController {
    */
   @Get('webhook')
   verifyWebhook(
-    @Query('hub.mode') mode: string,
-    @Query('hub.verify_token') token: string,
-    @Query('hub.challenge') challenge: string,
+    @Query() query: Record<string, any>,
     @Res() res: Response,
   ) {
+    // Express/qs may parse `hub.mode` as nested object { hub: { mode } }
+    // OR as literal key 'hub.mode' — handle both cases.
+    const hub = query?.hub ?? {};
+    const mode      = hub?.mode      ?? query?.['hub.mode'];
+    const token     = hub?.verify_token ?? query?.['hub.verify_token'];
+    const challenge = hub?.challenge  ?? query?.['hub.challenge'];
+
     const verifyToken =
       this.config.get<string>('WHATSAPP_WEBHOOK_VERIFY_TOKEN') ||
       'kalokea_webhook_verify';
+
+    this.logger.log(`WA webhook verify → mode=${mode} token=${token} challenge=${challenge}`);
 
     if (mode === 'subscribe' && token === verifyToken) {
       this.logger.log('WhatsApp webhook verified ✅');
       return res.status(200).send(challenge);
     }
-    this.logger.warn('WhatsApp webhook verify failed — token mismatch');
+    this.logger.warn(`WhatsApp webhook verify failed — expected token "${verifyToken}", got "${token}"`);
     return res.sendStatus(403);
   }
 
