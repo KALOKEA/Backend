@@ -75,10 +75,13 @@ export class ShiprocketService {
   private async loadOrder(orderId: string) {
     const { data, error } = await this.db.client
       .from('orders')
-      .select('*, order_items(*), users(name, email), addresses(*)')
+      .select('*, order_items(*), users(name, email)')
       .eq('id', orderId)
       .single();
-    if (error || !data) throw new BadRequestException('Order not found');
+    if (error || !data) {
+      this.logger.error(`loadOrder failed for ${orderId}: ${JSON.stringify(error)}`);
+      throw new BadRequestException('Order not found');
+    }
     return data;
   }
 
