@@ -17,8 +17,14 @@ export class CouponsService {
       .single();
 
     if (!coupon) throw new NotFoundException('Coupon not found or inactive');
+
+    // Date range checks
+    if (coupon.valid_from && new Date(coupon.valid_from) > new Date())
+      throw new BadRequestException('This coupon is not active yet');
     if (coupon.valid_until && new Date(coupon.valid_until) < new Date())
       throw new BadRequestException('Coupon expired');
+
+    // Global usage cap
     if (coupon.max_uses && coupon.used_count >= coupon.max_uses)
       throw new BadRequestException('Coupon usage limit reached');
 
@@ -38,8 +44,6 @@ export class CouponsService {
           );
         }
       } else if (dto.guest_email) {
-        // Guest path: check usage by email. Not bullet-proof (guests can change
-        // email) but it closes the trivial bot exploit for per-user-capped promos.
         const { count } = await this.db.client
           .from('coupon_uses')
           .select('id', { count: 'exact', head: true })
@@ -51,6 +55,32 @@ export class CouponsService {
           );
         }
       }
+    }
+
+    // New-users-only check: reject if the customer already has a confirmed order.
+    if (coupon.new_users_only) {
+      const confirmedStatuses = ['confirmed', 'processing', 'shipped', 'delivered'];
+      if (dto.user_id) {
+        const { count } = await this.db.client
+          .from('orders')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', dto.user_id)
+          .in('status', confirmedStatuses);
+        if ((count ?? 0) > 0) {
+          throw new BadRequestException('This coupon is only valid on your first order');
+        }
+      } else if (dto.guest_email) {
+        const { count } = await this.db.client
+          .from('orders')
+          .select('id', { count: 'exact', head: true })
+          .eq('guest_email', dto.guest_email.toLowerCase())
+          .in('status', confirmedStatuses);
+        if ((count ?? 0) > 0) {
+          throw new BadRequestException('This coupon is only valid on your first order');
+        }
+      }
+      // If neither user_id nor guest_email provided, allow — cannot verify at this stage.
+      // Order creation re-validates with full context and will catch it.
     }
 
     if (dto.order_value < coupon.min_order_value)
@@ -92,7 +122,7 @@ export class CouponsService {
       if (c.valid_until && new Date(c.valid_until) < now) continue;
       if (c.valid_from && new Date(c.valid_from) > now) continue;
       if (c.max_uses != null && c.used_count >= c.max_uses) continue;
-      if ((c.min_order_value || 0) > price) continue; // must apply to this item alone
+      if ((c.min_order_value || 0) > price) continue;
       const raw = c.type === 'percent' ? Math.round((price * c.value) / 100) : c.value;
       const discount = Math.min(raw, price);
       if (discount > 0 && (!best || discount > best.discount)) {
@@ -112,8 +142,6 @@ export class CouponsService {
       p_user_id: userId || null,
       p_guest_email: guestEmail ? guestEmail.toLowerCase() : null,
     });
-    // The order is already placed; if the limit was hit in a race we can't undo
-    // the discount, but we log it so it can be reconciled. used_count stays correct.
     if (error || ok !== true) {
       this.logger.warn(`Coupon ${couponId} redemption not recorded for order ${orderId} (limit reached or error)`);
     }
@@ -135,17 +163,52 @@ export class CouponsService {
   }
 
   async toggle(id: string) {
-    const { data: coupon } = await this.db.client.from('coupons').select('is_active').eq('id', id).single();
+    const { data: coupon } = await this.db.client
+      .from('coupons')
+      .select('is_active, is_permanent')
+      .eq('id', id)
+      .single();
     if (!coupon) throw new NotFoundException('Coupon not found');
+
+    // Permanent coupons cannot be disabled — they are platform-level offers
+    // (e.g. WELCOME15) that must always be available to new customers.
+    if (coupon.is_permanent && coupon.is_active) {
+      throw new BadRequestException('Permanent coupons cannot be disabled');
+    }
+
     const { data } = await this.db.client
       .from('coupons').update({ is_active: !coupon.is_active }).eq('id', id).select().single();
     return data;
   }
 
   async update(id: string, dto: Partial<CreateCouponDto>) {
+    // Fetch existing coupon to enforce permanent-coupon invariants.
+    const { data: existing } = await this.db.client
+      .from('coupons')
+      .select('is_permanent')
+      .eq('id', id)
+      .single();
+    if (!existing) throw new NotFoundException('Coupon not found');
+
+    const safeDto: Record<string, unknown> = {
+      ...dto,
+      ...(dto.code ? { code: dto.code.toUpperCase() } : {}),
+    };
+
+    if (existing.is_permanent) {
+      // Permanent coupons: cannot be deactivated or un-permanented via update.
+      delete safeDto['is_permanent'];
+      if (safeDto['is_active'] === false) {
+        delete safeDto['is_active']; // silently preserve is_active = true
+      }
+    } else if (safeDto['is_permanent'] === false) {
+      // Non-permanent coupons: is_permanent is one-way (can be SET to true, never revoked).
+      delete safeDto['is_permanent'];
+    }
+
     const { data, error } = await this.db.client
       .from('coupons')
-      .update({ ...dto, ...(dto.code ? { code: dto.code.toUpperCase() } : {}) })
+      .update(safeDto)
       .eq('id', id)
       .select().single();
     if (error || !data) throw new NotFoundException('Coupon not found');

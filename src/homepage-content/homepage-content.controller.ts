@@ -28,7 +28,7 @@ export class HomepageContentController {
    */
   @Public()
   @Get('homepage')
-  @Header('Cache-Control', 'public, max-age=60, stale-while-revalidate=300')
+  @Header('Cache-Control', 'public, max-age=300, s-maxage=300, stale-while-revalidate=3600')
   getHomepageData() {
     return this.service.getHomepageData();
   }
