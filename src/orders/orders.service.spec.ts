@@ -192,20 +192,10 @@ describe('OrdersService.cancelOrder', () => {
       .rejects.toThrow(ForbiddenException);
   });
 
-  it('throws ForbiddenException when 12-hour window has passed', async () => {
+  it('succeeds for COD order placed >12h ago — no time restriction any more', async () => {
     const thirteenHoursAgo = new Date(Date.now() - 13 * 60 * 60 * 1000).toISOString();
-    const order = pendingOrder({ created_at: thirteenHoursAgo });
-    const db = makeMockDb();
-    (db.client.from as jest.Mock).mockReturnValue({
-      select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: order }) }) }),
-    });
-    const service = await makeService(db);
-    await expect(service.cancelOrder('ord-1', 'user-1'))
-      .rejects.toThrow(ForbiddenException);
-  });
-
-  it('succeeds for COD order within 12h — updates status and sends email', async () => {
-    const order = pendingOrder({ payment_method: 'cod' });
+    // Order is still pending — should be cancellable regardless of age
+    const order = pendingOrder({ created_at: thirteenHoursAgo, payment_method: 'cod' });
     const db = makeMockDb();
     const emailMock = makeMockEmail();
 

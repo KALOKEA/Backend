@@ -634,8 +634,8 @@ export class OrdersService {
    * Cancel an order within the 12-hour window.
    * Rules:
    *  - Only the order owner can cancel.
-   *  - Order must be in fulfillment_status = 'pending'.
-   *  - Order must have been placed within the last 12 hours.
+   *  - Order must be in status 'pending' or 'confirmed' (before packing starts).
+   *  - No time restriction — cancellation allowed until the admin moves it to 'processing'.
    *  - On cancel: restore stock, trigger Razorpay refund if payment_status = 'paid'.
    */
   async cancelOrder(id: string, userId: string): Promise<{ message: string }> {
@@ -652,21 +652,14 @@ export class OrdersService {
       throw new ForbiddenException('Order not found');
     }
 
-    // Status check: block if EITHER status has progressed past pending.
-    // (Using && was a bug — a shipped order could bypass the guard if one field
-    // hadn't been updated yet.)
-    if (order.fulfillment_status !== 'pending' || order.status !== 'pending') {
+    // Status check: allow cancellation while pending or confirmed (before packing starts).
+    // fulfillment_status stays 'pending' for both order statuses 'pending' and 'confirmed'
+    // (it only advances to 'shipped' / 'delivered' / 'cancelled' via the fulfillmentMap).
+    // Check BOTH columns so a partially-updated row can't slip through.
+    const cancellableStatuses = ['pending', 'confirmed'];
+    if (!cancellableStatuses.includes(order.status) || order.fulfillment_status !== 'pending') {
       throw new ForbiddenException(
-        'Cancellation window has closed. Orders can only be cancelled within 12 hours of placement.',
-      );
-    }
-
-    // 12-hour window check
-    const placedAt = new Date(order.created_at).getTime();
-    const twelveHoursMs = 12 * 60 * 60 * 1000;
-    if (Date.now() - placedAt > twelveHoursMs) {
-      throw new ForbiddenException(
-        'Cancellation window has closed. Orders can only be cancelled within 12 hours of placement.',
+        'This order can no longer be cancelled. Please contact support if you need help.',
       );
     }
 
