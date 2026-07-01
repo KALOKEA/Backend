@@ -20,6 +20,10 @@ export class UpdateVariantDto {
   stock?: number;
 
   @IsOptional()
+  @IsString()
+  sku?: string;
+
+  @IsOptional()
   @IsBoolean()
   is_active?: boolean;
 }
