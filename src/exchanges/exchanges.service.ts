@@ -85,14 +85,25 @@ export class ExchangesService {
   }
 
   /** Sibling variants a customer can exchange an ordered line for (in stock,
-   *  excluding the one they already have). Ownership enforced. */
+   *  excluding the one they already have). Ownership enforced via user_id OR
+   *  guest-email match (same rule as create() and cancelOrder()). */
   async getOptions(orderItemId: string, userId: string) {
     const { data: item } = await this.db.client
       .from('order_items')
-      .select('id, variant_id, snapshot_name, quantity, orders!inner(user_id)')
+      .select('id, variant_id, snapshot_name, quantity, orders!inner(user_id, guest_email)')
       .eq('id', orderItemId)
       .single();
-    if (!item || (item.orders as any).user_id !== userId) {
+    if (!item) throw new NotFoundException('Order item not found');
+
+    const orderUserId = (item.orders as any).user_id;
+    const orderGuestEmail = (item.orders as any).guest_email;
+    const { data: u } = await this.db.client
+      .from('users').select('email').eq('id', userId).maybeSingle();
+    const reqEmail = u?.email?.toLowerCase();
+    const guestEmailMatches =
+      reqEmail && orderGuestEmail && orderGuestEmail.toLowerCase() === reqEmail;
+
+    if (orderUserId !== userId && !guestEmailMatches) {
       throw new NotFoundException('Order item not found');
     }
 
