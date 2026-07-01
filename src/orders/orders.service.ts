@@ -777,7 +777,7 @@ export class OrdersService {
     return { message: 'Order cancelled successfully' };
   }
 
-  async findAll(userId?: string, page = 1, limit = 10, status?: string, search?: string) {
+  async findAll(userId?: string, page = 1, limit = 10, status?: string, search?: string, archived?: boolean) {
     const from = (page - 1) * limit;
     // Admin fetch joins users so the order list can show customer names/emails.
     const selectCols = userId
@@ -803,6 +803,28 @@ export class OrdersService {
         ? q.or(`user_id.eq.${userId},guest_email.eq."${email}"`)
         : q.eq('user_id', userId);
     }
+
+    // Admin archive filter: an order is "auto-archived" when it was delivered or
+    // cancelled more than 8 days ago (updated_at < now - 8 days).
+    // archived=true  → only those old completed orders
+    // archived=false → exclude them from the main view (default for admin list)
+    if (!userId && archived !== undefined) {
+      const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
+      if (archived) {
+        // Archived tab: delivered/cancelled AND older than 8 days
+        q = (q as any)
+          .in('status', ['delivered', 'cancelled'])
+          .lt('updated_at', eightDaysAgo);
+      } else {
+        // Active tab: exclude delivered/cancelled that are older than 8 days.
+        // PostgREST: NOT (status IN ('delivered','cancelled') AND updated_at < eightDaysAgo)
+        // = keep if: status NOT IN those values OR updated_at >= eightDaysAgo
+        q = (q as any).or(
+          `status.not.in.(delivered,cancelled),updated_at.gte.${eightDaysAgo}`,
+        );
+      }
+    }
+
     if (status) q = q.eq('status', status);
     if (search) {
       const s = search.replace(/'/g, "''"); // escape single quotes
@@ -814,6 +836,47 @@ export class OrdersService {
     const { data, error, count } = await q;
     if (error) throw error;
     return { data, meta: { total: count, page, limit } };
+  }
+
+  /**
+   * Admin: mark an order as archived so it moves from Active to the Archived tab.
+   * The order is never deleted — all data is preserved for GST / audit purposes.
+   * Archived = we manually set updated_at to a date 8+ days ago, which the
+   * archive filter picks up automatically. We use a dedicated 'archived' status
+   * so the filter is stable (not tied to an arbitrary date tweak).
+   */
+  async archiveOrder(id: string): Promise<{ message: string }> {
+    const { data: order } = await this.db.client
+      .from('orders').select('id, status').eq('id', id).single();
+    if (!order) throw new NotFoundException('Order not found');
+
+    const { error } = await this.db.client
+      .from('orders')
+      .update({ status: 'archived', updated_at: new Date().toISOString() })
+      .eq('id', id);
+    if (error) throw new InternalServerErrorException('Failed to archive order');
+    return { message: 'Order archived' };
+  }
+
+  /**
+   * Admin: permanently delete an order. Blocked for paid orders to protect
+   * financial records. Only for test/junk orders with no real payment.
+   */
+  async deleteOrder(id: string): Promise<{ message: string }> {
+    const { data: order } = await this.db.client
+      .from('orders').select('id, payment_status, order_number').eq('id', id).single();
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.payment_status === 'paid') {
+      throw new BadRequestException(
+        'Cannot delete a paid order. Archive it instead to preserve financial records.',
+      );
+    }
+
+    // Delete order items first (FK constraint), then the order.
+    await this.db.client.from('order_items').delete().eq('order_id', id);
+    const { error } = await this.db.client.from('orders').delete().eq('id', id);
+    if (error) throw new InternalServerErrorException('Failed to delete order');
+    return { message: `Order ${order.order_number} deleted` };
   }
 
   async findOne(id: string, user?: { id: string; role: string }, guestEmail?: string) {

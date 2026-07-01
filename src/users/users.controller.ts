@@ -61,11 +61,11 @@ export class UsersController {
     return this.users.createStaff(body);
   }
 
-  /** Owner: update a staff member's name and/or permissions. */
+  /** Owner: update a staff member's name, contact info, and/or permissions. */
   @UseGuards(AdminGuard)
   @AdminAction('staff.update')
   @Patch('staff/:id')
-  updateStaff(@Param('id') id: string, @Body() body: { name?: string; permissions?: string[] }) {
+  updateStaff(@Param('id') id: string, @Body() body: { name?: string; email?: string; phone?: string; permissions?: string[] }) {
     return this.users.updateStaff(id, body);
   }
 

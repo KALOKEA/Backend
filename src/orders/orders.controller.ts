@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, Query, Res, UseGuards, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, Res, UseGuards, ForbiddenException } from '@nestjs/common';
 import { Response } from 'express';
 import { Throttle } from '@nestjs/throttler';
 import { OrdersService } from './orders.service';
@@ -51,8 +51,10 @@ export class OrdersController {
   }
 
   /**
-   * Admin: list ALL orders with pagination + optional status filter.
+   * Admin: list ALL orders with pagination + optional status / archive filter.
    * Static route — MUST be declared before :id to avoid route ambiguity.
+   * ?archived=true  → only orders that are auto-archived (delivered/cancelled older than 8 days)
+   * ?archived=false → default — exclude auto-archived orders from main view
    */
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @Get()
@@ -61,8 +63,10 @@ export class OrdersController {
     @Query('limit') limit = '20',
     @Query('status') status?: string,
     @Query('search') search?: string,
+    @Query('archived') archived?: string,
   ) {
-    return this.orders.findAll(undefined, +page, +limit, status, search);
+    const archivedBool = archived === 'true' ? true : archived === 'false' ? false : undefined;
+    return this.orders.findAll(undefined, +page, +limit, status, search, archivedBool);
   }
 
   /** Admin: export all orders as CSV. Static route MUST be declared before :id. */
@@ -115,6 +119,29 @@ export class OrdersController {
     @Query('guest_email') guestEmail?: string,
   ) {
     return this.orders.findOne(id, user, guestEmail);
+  }
+
+  /**
+   * Admin: move order to archived view (hides from main orders list).
+   * Archived orders are still stored and accessible via ?archived=true.
+   * No data is deleted — safe for GST records.
+   */
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @AdminAction('order.archive')
+  @Patch(':id/archive')
+  archiveOrder(@Param('id') id: string) {
+    return this.orders.archiveOrder(id);
+  }
+
+  /**
+   * Admin: permanently delete an order (only for test/junk orders with no payment).
+   * Blocked if order has payment_status='paid'. Safe for dev/test cleanup.
+   */
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @AdminAction('order.delete')
+  @Delete(':id')
+  deleteOrder(@Param('id') id: string) {
+    return this.orders.deleteOrder(id);
   }
 
   /**

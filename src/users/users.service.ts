@@ -273,8 +273,8 @@ export class UsersService {
     return data;
   }
 
-  /** Update a staff member's name and/or granted permissions. */
-  async updateStaff(id: string, dto: { name?: string; permissions?: unknown }) {
+  /** Update a staff member's name, contact info, and/or granted permissions. */
+  async updateStaff(id: string, dto: { name?: string; email?: string; phone?: string; permissions?: unknown }) {
     const { data: target } = await this.db.client
       .from('users')
       .select('id, role')
@@ -287,6 +287,8 @@ export class UsersService {
 
     const updates: Record<string, any> = { updated_at: new Date().toISOString() };
     if (dto.name !== undefined) updates.name = dto.name?.trim() || null;
+    if (dto.email !== undefined) updates.email = dto.email?.trim() || null;
+    if (dto.phone !== undefined) updates.phone = dto.phone?.trim() || null;
     if (dto.permissions !== undefined) updates.permissions = sanitisePermissions(dto.permissions);
 
     const { data, error } = await this.db.client
