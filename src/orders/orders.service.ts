@@ -811,17 +811,18 @@ export class OrdersService {
     if (!userId && archived !== undefined) {
       const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
       if (archived) {
-        // Archived tab: delivered/cancelled AND older than 8 days
-        q = (q as any)
-          .in('status', ['delivered', 'cancelled'])
-          .lt('updated_at', eightDaysAgo);
-      } else {
-        // Active tab: exclude delivered/cancelled that are older than 8 days.
-        // PostgREST: NOT (status IN ('delivered','cancelled') AND updated_at < eightDaysAgo)
-        // = keep if: status NOT IN those values OR updated_at >= eightDaysAgo
+        // Archived tab: manually archived (status='archived') OR auto-archived
+        // (delivered/cancelled AND updated_at older than 8 days).
+        // PostgREST nested OR: status=archived OR (status IN (d,c) AND updated_at < X)
         q = (q as any).or(
-          `status.not.in.(delivered,cancelled),updated_at.gte.${eightDaysAgo}`,
+          `status.eq.archived,and(status.in.(delivered,cancelled),updated_at.lt.${eightDaysAgo})`,
         );
+      } else {
+        // Active tab: exclude manually-archived AND auto-archived orders.
+        // Keep if: status != 'archived' AND (status NOT IN (d,c) OR updated_at >= X)
+        q = (q as any)
+          .neq('status', 'archived')
+          .or(`status.not.in.(delivered,cancelled),updated_at.gte.${eightDaysAgo}`);
       }
     }
 
