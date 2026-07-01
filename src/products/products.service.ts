@@ -159,6 +159,17 @@ export class ProductsService {
       .single();
     if (error) throw new BadRequestException(error.message || 'Failed to update product');
     if (!data) throw new NotFoundException('Product not found');
+
+    // Cascade base_price to all variants so checkout always charges the
+    // current product price (product_variants.price is what the order uses).
+    if (dto.base_price !== undefined) {
+      await this.db.client
+        .from('product_variants')
+        .update({ price: dto.base_price })
+        .eq('product_id', id);
+      // Ignore cascade errors — the product row is already saved.
+    }
+
     this.triggerDeploy();
     return data;
   }

@@ -1244,7 +1244,7 @@ export class OrdersService {
     ${taxRows}
     <tr><td>Total GST</td><td style="text-align:right">${money(totalGst)}</td></tr>
     ${order.discount ? `<tr><td>Discount</td><td style="text-align:right">- ${money(order.discount)}</td></tr>` : ''}
-    <tr><td>Shipping</td><td style="text-align:right">${money(order.shipping || 0)}</td></tr>
+    <tr><td>Shipping</td><td style="text-align:right">${(order.shipping || 0) === 0 ? 'Free' : money(order.shipping)}</td></tr>
     <tr class="grand"><td>Total</td><td style="text-align:right">${money(order.total)}</td></tr>
   </table>
 
