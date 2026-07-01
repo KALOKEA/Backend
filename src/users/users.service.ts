@@ -1,11 +1,17 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { EmailService } from '../email/email.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { sanitisePermissions } from '../common/auth/permissions';
 
 @Injectable()
 export class UsersService {
-  constructor(private db: DatabaseService) {}
+  private readonly logger = new Logger(UsersService.name);
+
+  constructor(
+    private db: DatabaseService,
+    private email: EmailService,
+  ) {}
 
   async findOne(id: string) {
     const { data } = await this.db.client
@@ -233,6 +239,14 @@ export class UsersService {
         .select('id, name, email, phone, role, permissions, created_at')
         .single();
       if (error) throw new BadRequestException(error.message);
+      // Notify the existing user that they have been promoted to staff.
+      if (data?.email) {
+        this.email.sendStaffInvite(data.email, {
+          staff_name: data.name || data.email,
+          granted_by: 'Admin',
+          permissions: Array.isArray(permissions) ? permissions : [],
+        }).catch((e: any) => this.logger.warn(`Staff invite email failed for ${data.email}: ${e?.message}`));
+      }
       return data;
     }
 
@@ -248,6 +262,14 @@ export class UsersService {
       .select('id, name, email, phone, role, permissions, created_at')
       .single();
     if (error) throw new BadRequestException(error.message);
+    // Notify the new staff member so they know they have access and how to sign in.
+    if (data?.email) {
+      this.email.sendStaffInvite(data.email, {
+        staff_name: data.name || data.email,
+        granted_by: 'Admin',
+        permissions: Array.isArray(permissions) ? permissions : [],
+      }).catch((e: any) => this.logger.warn(`Staff invite email failed for ${data.email}: ${e?.message}`));
+    }
     return data;
   }
 

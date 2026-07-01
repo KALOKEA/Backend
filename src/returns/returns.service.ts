@@ -19,14 +19,21 @@ export class ReturnsService {
     // Without this check, any authenticated user can file returns on other users' orders.
     const { data: order } = await this.db.client
       .from('orders')
-      .select('id, user_id, fulfillment_status, delivered_at, created_at')
+      .select('id, user_id, guest_email, fulfillment_status, delivered_at, created_at')
       .eq('id', dto.order_id)
       .single();
 
     if (!order) throw new NotFoundException('Order not found');
 
-    if (order.user_id !== userId) {
-      // Return same message as NotFoundException to avoid leaking order existence to attackers
+    // Ownership: accept user_id match OR guest-email match (same pattern as "My Orders"
+    // listing — guest checkout orders show up for the same email after sign-up).
+    const { data: u } = await this.db.client
+      .from('users').select('email').eq('id', userId).maybeSingle();
+    const reqEmail = u?.email?.toLowerCase();
+    const guestEmailMatches =
+      reqEmail && order.guest_email && order.guest_email.toLowerCase() === reqEmail;
+
+    if (order.user_id !== userId && !guestEmailMatches) {
       throw new NotFoundException('Order not found');
     }
 

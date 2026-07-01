@@ -990,4 +990,88 @@ export class EmailService {
     });
     await this.send(to, `We miss you — new styles are here`, html, undefined, 'winback');
   }
+
+  /**
+   * Sent to a newly-created or newly-promoted staff member so they know they
+   * have admin panel access and how to sign in via OTP.
+   */
+  async sendStaffInvite(to: string, vars: {
+    staff_name: string;
+    granted_by: string;
+    permissions: string[];
+  }): Promise<void> {
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.com';
+    const adminUrl = `${siteUrl}/admin/`;
+    const permList = vars.permissions.length
+      ? vars.permissions.map((p) => `<li style="margin:4px 0;font-size:13px;color:#3a3a3a;">${p}</li>`).join('')
+      : '<li style="margin:4px 0;font-size:13px;color:#3a3a3a;">General access</li>';
+
+    const body = `
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Hi ${vars.staff_name}, <strong>${vars.granted_by}</strong> has given you staff access
+        to the Kalokea admin panel.
+      </p>
+      <p style="margin:0 0 10px;font-size:13px;line-height:1.6;color:#6b6b6b;">Your granted permissions:</p>
+      <ul style="margin:0 0 22px;padding-left:20px;">${permList}</ul>
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Sign in with a one-time password (OTP) sent to <strong>${to}</strong>:
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0" style="margin-bottom:22px;">
+        <tr><td style="border-radius:6px;background:#0a0a0a;">
+          <a href="${adminUrl}"
+             style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
+            Go to Admin Panel
+          </a>
+        </td></tr>
+      </table>
+      <p style="margin:0;font-size:12px;line-height:1.6;color:#9a9a9a;">
+        If you did not expect this invitation, please ignore this email or contact
+        <a href="mailto:${this.senderEmail}" style="color:#7C4A2D;">${this.senderEmail}</a>.
+      </p>
+    `;
+    const html = this.layout({
+      preheader: `You now have staff access to the Kalokea admin panel`,
+      eyebrow: 'Staff Access',
+      heading: `You've been added as a staff member`,
+      body,
+    });
+    await this.send(to, `You now have admin access — Kalokea`, html, undefined, 'staff_invite');
+  }
+
+  /**
+   * Sent to the customer when an admin confirms their order (moves it from
+   * 'pending' to 'confirmed') so they know the order has been accepted.
+   */
+  async sendOrderConfirmed(to: string, vars: {
+    customer_name: string;
+    order_id: string;
+  }): Promise<void> {
+    const siteUrl = this.config.get('SITE_URL') || 'https://kalokea.com';
+    const body = `
+      <p style="margin:0 0 18px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        Hi ${vars.customer_name}, great news — your order
+        <strong style="color:#0a0a0a;">#${vars.order_id}</strong> has been confirmed.
+        Our team will start preparing it shortly.
+      </p>
+      <p style="margin:0 0 22px;font-size:14px;line-height:1.7;color:#6b6b6b;">
+        You will receive another update once your order is being packed and when
+        it is dispatched with a tracking number.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0">
+        <tr><td style="border-radius:6px;background:#0a0a0a;">
+          <a href="${siteUrl}/account/orders/"
+             style="display:inline-block;padding:13px 30px;font-family:Arial,Helvetica,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#ffffff;text-decoration:none;">
+            View My Order
+          </a>
+        </td></tr>
+      </table>
+    `;
+    const html = this.layout({
+      preheader: `Your order #${vars.order_id} has been confirmed`,
+      eyebrow: 'Order Confirmed',
+      heading: 'Your order is confirmed',
+      body,
+    });
+    await this.send(to, `Order confirmed — #${vars.order_id}`, html, undefined, 'order_confirmed');
+  }
 }

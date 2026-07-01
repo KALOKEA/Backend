@@ -647,8 +647,18 @@ export class OrdersService {
 
     if (!order) throw new NotFoundException('Order not found');
 
-    // Ownership check
-    if (order.user_id !== userId) {
+    // Ownership check — covers both orders placed while logged in (user_id match)
+    // AND guest orders that show in "My Orders" because the guest email matches
+    // the user's registered email. Without the email fallback, a customer who
+    // checked out as a guest and then created an account can see but not cancel
+    // their own order.
+    const { data: requestingUser } = await this.db.client
+      .from('users').select('email').eq('id', userId).maybeSingle();
+    const reqEmail = requestingUser?.email?.toLowerCase();
+    const guestEmailMatches =
+      reqEmail && order.guest_email && order.guest_email.toLowerCase() === reqEmail;
+
+    if (order.user_id !== userId && !guestEmailMatches) {
       throw new ForbiddenException('Order not found');
     }
 
@@ -834,7 +844,13 @@ export class OrdersService {
     if (!order) throw new NotFoundException('Order not found');
 
     // Sync fulfillment_status for statuses that map 1:1.
+    // 'processing' is included so that once the admin starts packing, the
+    // customer's cancelOrder() check (fulfillment_status === 'pending') correctly
+    // blocks cancellation — orders being packed should not be cancellable.
+    // 'pending' and 'confirmed' intentionally keep fulfillment_status='pending'
+    // so customers can still cancel before packing begins.
     const fulfillmentMap: Record<string, string> = {
+      processing: 'processing',
       shipped: 'shipped',
       delivered: 'delivered',
       cancelled: 'cancelled',
@@ -850,6 +866,18 @@ export class OrdersService {
     // Resolve email for both logged-in users AND guests
     const userEmail = order.guest_email || (order.users as any)?.email;
     const customerName = (order.users as any)?.name || 'Customer';
+
+    if (dto.status === 'confirmed') {
+      // Notify the customer that their order has been accepted so they aren't
+      // left wondering after placing it (previously no email was sent at all
+      // for the 'confirmed' transition).
+      if (userEmail) {
+        await this.email.sendOrderConfirmed(userEmail, {
+          customer_name: customerName,
+          order_id: order.order_number,
+        }).catch(() => {});
+      }
+    }
 
     if (dto.status === 'processing') {
       if (userEmail) {

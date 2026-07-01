@@ -21,14 +21,25 @@ export class ExchangesService {
 
   async create(dto: CreateExchangeDto, userId: string) {
     // Verify the order line belongs to this user's order.
+    // Fetch guest_email alongside user_id so we can match guest-checkout orders
+    // that appear in "My Orders" by email (same ownership rule as cancelOrder).
     const { data: item } = await this.db.client
       .from('order_items')
-      .select('*, orders!inner(id, user_id)')
+      .select('*, orders!inner(id, user_id, guest_email)')
       .eq('id', dto.order_item_id)
       .eq('order_id', dto.order_id)
       .single();
     if (!item) throw new NotFoundException('Order item not found');
-    if ((item.orders as any).user_id !== userId) {
+
+    const orderUserId = (item.orders as any).user_id;
+    const orderGuestEmail = (item.orders as any).guest_email;
+    const { data: u } = await this.db.client
+      .from('users').select('email').eq('id', userId).maybeSingle();
+    const reqEmail = u?.email?.toLowerCase();
+    const guestEmailMatches =
+      reqEmail && orderGuestEmail && orderGuestEmail.toLowerCase() === reqEmail;
+
+    if (orderUserId !== userId && !guestEmailMatches) {
       throw new NotFoundException('Order item not found');
     }
 
